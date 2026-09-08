@@ -5,6 +5,11 @@ const configuredOrigin = typeof process !== 'undefined' ? process.env?.PUBLIC_OR
 export const SITE_NAME = 'RC IT Services';
 export const SITE_ORIGIN = String(configuredOrigin || 'https://rcitcservices.frsmkgit.workers.dev').replace(/\/+$/, '');
 
+// Keep individual vacancy URLs crawlable but out of search results until the real
+// application workflow is enabled. Google JobPosting markup requires an open job
+// with a working application path; Phase 12 owns that production capability.
+export const JOB_SEARCH_INDEXING_ENABLED = false;
+
 export const STATIC_PAGE_SEO = {
   '/': {
     label: 'Home',
@@ -44,7 +49,7 @@ export const STATIC_PAGE_SEO = {
   '/careers': {
     label: 'Careers',
     title: 'Technology Careers in the UK | RC IT Services',
-    description: 'Explore published RC IT Services technology and consulting vacancies, role requirements, working arrangements and job-specific application routes.',
+    description: 'Learn about careers at RC IT Services, technology role profiles, working arrangements and the recruitment process.',
     image: IMAGES.careers,
     index: true
   },
