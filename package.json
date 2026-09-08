@@ -12,9 +12,10 @@
     "test:design-system": "node tests/design-system.mjs",
     "test:performance-routing": "node tests/performance-routing.mjs",
     "test:seo": "node tests/seo.mjs",
+    "test:seo-preview": "node tests/seo-preview.mjs",
     "test:performance": "node scripts/check-performance.mjs",
     "test:seo-build": "node tests/seo-build.mjs",
-    "test": "npm run test:smoke && npm run test:render && npm run test:design-system && npm run test:performance-routing && npm run test:seo",
+    "test": "npm run test:smoke && npm run test:render && npm run test:design-system && npm run test:performance-routing && npm run test:seo && npm run test:seo-preview",
     "build": "node scripts/build.mjs",
     "verify": "npm run check:architecture && npm test && npm run build && npm run test:performance && npm run test:seo-build"
   },
