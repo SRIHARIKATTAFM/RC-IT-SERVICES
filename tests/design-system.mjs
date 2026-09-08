@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import {
   actionCard,
+  brandTemplate,
   breadcrumbs,
   buttonClasses,
   dialogTemplate,
@@ -21,12 +22,21 @@ function assert(condition, message) {
 }
 
 const header = headerTemplate('/careers');
+for (const className of ['utility-bar', 'site-header', 'header-inner', 'brand', 'desktop-nav', 'nav-link', 'header-cta', 'mobile-menu-button', 'mobile-panel', 'mobile-nav']) {
+  assert(header.includes(className), `Shared header lost CSS contract: ${className}`);
+}
 assert(header.includes('aria-label="Primary navigation"'), 'Shared header lost primary navigation semantics');
 assert(header.includes('aria-label="Mobile navigation"'), 'Shared header lost mobile navigation semantics');
 assert(header.includes('aria-current="page"'), 'Active shared navigation does not expose aria-current');
 assert(header.includes('aria-controls="mobile-panel"'), 'Mobile menu control relationship is missing');
 
+const escapedBrand = brandTemplate({ label: 'RC <Home> & services' });
+assert(escapedBrand.includes('aria-label="RC &lt;Home&gt; &amp; services"'), 'Brand accessibility label is not escaped at the component boundary');
+
 const footer = footerTemplate();
+for (const className of ['site-footer', 'footer-main', 'footer-top', 'footer-brand', 'footer-column', 'footer-bottom', 'footer-legal']) {
+  assert(footer.includes(className), `Shared footer lost CSS contract: ${className}`);
+}
 assert(footer.includes('Registered in England and Wales'), 'Shared footer lost legal registration context');
 assert(footer.includes('/privacy') && footer.includes('/cookies') && footer.includes('/terms'), 'Shared footer lost legal links');
 
@@ -42,9 +52,11 @@ assert(linkButton({ href: '/contact', label: 'Contact' }).includes('class="btn b
 
 const action = actionCard({ number: '01', title: '<Unsafe>', text: 'Text & more', href: '/products' });
 assert(action.includes('&lt;Unsafe&gt;') && action.includes('Text &amp; more'), 'Card component failed to escape content');
+assert(action.includes('action-card__number') && action.includes('action-card__arrow'), 'Action card lost approved CSS hooks');
 
 const product = productCard({ tag: 'Platform', title: 'Product', text: 'Description', bullets: ['One'], demoProduct: 'Demo' });
 assert(product.includes('data-request-demo="Demo"'), 'Product card lost demo trigger contract');
+assert(product.includes('product-card product-card--expanded'), 'Product card lost approved CSS hooks');
 
 const input = field('email', 'Email', 'email', true);
 assert(input.includes('required') && input.includes('aria-describedby='), 'Shared input field lost required/error semantics');
@@ -64,5 +76,18 @@ const tokens = await readFile(new URL('../src/frontend/styles/tokens.css', impor
 for (const token of ['--space-4', '--container-narrow', '--control-height', '--field-height', '--z-dialog', '--focus-outline']) {
   assert(tokens.includes(token), `Design-system token missing: ${token}`);
 }
+for (const visualBaseline of [
+  '--color-primary-500: #c35a38;',
+  '--color-ink-950: #0b1720;',
+  '--container: 1240px;',
+  '--display-1: clamp(2.85rem, 6vw, 5.7rem);',
+  '--font-sans: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;'
+]) {
+  assert(tokens.includes(visualBaseline), `Approved visual baseline token changed unexpectedly: ${visualBaseline}`);
+}
 
-console.log('PASS: shared navigation, footer, content, button, card, form, feedback, layout and token contracts verified.');
+const baseCss = await readFile(new URL('../src/frontend/styles/base.css', import.meta.url), 'utf8');
+assert(baseCss.includes('.container { width: min(calc(100% - (2 * var(--gutter))), var(--container)); margin-inline: auto; }'), 'Default responsive container width contract changed unexpectedly');
+assert(baseCss.includes('.container--narrow') && baseCss.includes('.container--wide'), 'Controlled responsive container variants are missing');
+
+console.log('PASS: shared navigation, footer, content, button, card, form, feedback, layout, accessibility and approved visual-token contracts verified.');
