@@ -2,7 +2,7 @@ globalThis.document = { title: '' };
 globalThis.location = { origin: 'https://rcitcservices.frsmkgit.workers.dev' };
 
 const { routeContent } = await import('../src/frontend/router/router.js');
-const { ALL_ROUTES, LEGACY_ROUTE_ALIASES } = await import('../src/frontend/app/site-config.js');
+const { ALL_ROUTES, COMPANY, LEGACY_ROUTE_ALIASES } = await import('../src/frontend/app/site-config.js');
 const { SERVICE_PAGES } = await import('../src/frontend/app/pages.js');
 const { getPublishedJobs } = await import('../src/frontend/app/career-job-catalog.js');
 const {
@@ -20,6 +20,15 @@ const {
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+function htmlEsc(value = '') {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
 }
 
 function unique(values, label) {
@@ -58,6 +67,16 @@ unique(indexableRoutes.map((route) => getSeoForRoute(route).description), 'Index
 assert(getSeoForRoute('/login').index === false, 'Login must remain noindex.');
 assert(renderSeoHead('/login').includes('noindex,nofollow'), 'Login noindex metadata is missing.');
 
+const organization = schemaGraphForRoute('/').find((node) => node['@type'] === 'Organization');
+const [streetAddress, addressLocality, addressRegion, postalCode] = COMPANY.registeredOffice.split(',').map((part) => part.trim());
+assert(organization?.legalName === COMPANY.legalName, 'Organization legal name is not sourced from COMPANY.');
+assert(organization?.identifier === COMPANY.companyNumber, 'Organization company number is not sourced from COMPANY.');
+assert(organization?.address?.streetAddress === streetAddress, 'Organization street address diverged from COMPANY.registeredOffice.');
+assert(organization?.address?.addressLocality === addressLocality, 'Organization locality diverged from COMPANY.registeredOffice.');
+assert(organization?.address?.addressRegion === addressRegion, 'Organization region diverged from COMPANY.registeredOffice.');
+assert(organization?.address?.postalCode === postalCode, 'Organization postcode diverged from COMPANY.registeredOffice.');
+assert(organization?.address?.addressCountry === 'GB', 'Organization country must be GB.');
+
 for (const job of publishedJobs) {
   const detailPath = `/careers/jobs/${job.slug}`;
   const applicationPath = `${detailPath}/apply`;
@@ -70,6 +89,22 @@ for (const job of publishedJobs) {
   assert(jobPosting, `JobPosting schema missing: ${detailPath}`);
   assert(jobPosting.description.includes('<p>') && jobPosting.description.includes('<ul>'), `JobPosting description must contain structured HTML: ${detailPath}`);
   assert(jobPosting.description.includes('Responsibilities') && jobPosting.description.includes('Qualifications'), `JobPosting description is incomplete: ${detailPath}`);
+
+  for (const [label, value] of [
+    ['Department', job.department],
+    ['Location', job.location],
+    ['Working arrangement', job.workStyle],
+    ['Employment type', job.employmentType],
+    ['Experience', job.experience]
+  ]) {
+    if (value) {
+      assert(jobPosting.description.includes(`${label}: ${htmlEsc(value)}`), `JobPosting description is missing visible ${label.toLowerCase()}: ${detailPath}`);
+    }
+  }
+  for (const industry of job.industries || []) {
+    assert(jobPosting.description.includes(`<li>${htmlEsc(industry)}</li>`), `JobPosting description is missing visible industry context: ${detailPath}`);
+  }
+
   assert(jobPosting.datePosted === job.postedDate, `JobPosting datePosted changed: ${detailPath}`);
   assert(jobPosting.jobLocation?.address?.addressCountry === 'GB', `JobPosting country missing: ${detailPath}`);
 
