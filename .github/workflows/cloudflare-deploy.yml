@@ -153,7 +153,10 @@ jobs:
           ! grep -q '/apply</loc>' /tmp/sitemap.xml
 
           curl -sS "${BASE}/robots.txt" -o /tmp/robots.txt
-          grep -q 'Disallow: /login' /tmp/robots.txt
+          ! grep -q 'Disallow: /login' /tmp/robots.txt
+          ! grep -q '/apply' /tmp/robots.txt
+          grep -q 'Disallow: /api/' /tmp/robots.txt
+          grep -q 'Disallow: /admin/' /tmp/robots.txt
           grep -q "Sitemap: ${BASE}/sitemap.xml" /tmp/robots.txt
 
           unknown_code=$(curl -sS -o /tmp/not-found.html -w '%{http_code}' "${BASE}/definitely-not-a-real-rc-route")
