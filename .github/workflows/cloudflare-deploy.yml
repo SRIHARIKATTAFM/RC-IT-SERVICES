@@ -68,7 +68,7 @@ jobs:
     timeout-minutes: 8
 
     steps:
-      - name: Wait for Cloudflare Workers Build and verify deep routes
+      - name: Wait for current Cloudflare Workers build and verify deep routes
         shell: bash
         run: |
           set -euo pipefail
@@ -97,13 +97,18 @@ jobs:
               all_ok=0
             fi
 
+            root_code=$(curl -L -sS -o /tmp/rc-deployment.html -w '%{http_code}' "${BASE}/" || true)
+            if [[ "$root_code" != '200' ]] || ! grep -q 'data-route-styles=' /tmp/rc-deployment.html || ! grep -q 'global-overrides-' /tmp/rc-deployment.html; then
+              all_ok=0
+            fi
+
             if [[ "$all_ok" == '1' ]]; then
-              echo "Cloudflare production routes verified on attempt ${attempt}."
+              echo "Current Phase 5 Cloudflare production build verified on attempt ${attempt}."
               break
             fi
 
             if [[ "$attempt" == '30' ]]; then
-              echo 'Cloudflare production did not become healthy within the verification window.' >&2
+              echo 'Current Cloudflare production build did not become healthy within the verification window.' >&2
               exit 1
             fi
             sleep 5
@@ -117,19 +122,38 @@ jobs:
 
           curl -L -sS "${BASE}/" -o /tmp/rc-index.html
           app_asset=$(grep -oE '/assets/app-[A-Za-z0-9]+\.js' /tmp/rc-index.html | head -n1)
-          test -n "$app_asset"
-          curl -sSI "${BASE}${app_asset}" | tr -d '\r' | grep -qi 'cache-control:.*max-age=31536000.*immutable'
+          if [[ -z "$app_asset" ]]; then
+            echo 'Hashed application JavaScript was not found in production HTML.' >&2
+            exit 1
+          fi
+          curl -sSI "${BASE}${app_asset}" | tr -d '\r' | grep -qi 'cache-control:.*max-age=31536000.*immutable' || {
+            echo 'Application JavaScript is missing immutable cache headers.' >&2
+            exit 1
+          }
 
           route_assets=$(grep -oE 'route-(careers|services|legal)-[A-Za-z0-9]+\.css' /tmp/rc-index.html | sort -u)
-          test "$(printf '%s\n' "$route_assets" | sed '/^$/d' | wc -l)" -eq 3
+          route_count=$(printf '%s\n' "$route_assets" | sed '/^$/d' | wc -l | tr -d ' ')
+          if [[ "$route_count" != '3' ]]; then
+            echo "Expected 3 production route stylesheets; found ${route_count}." >&2
+            exit 1
+          fi
           while IFS= read -r asset; do
-            test -n "$asset"
+            [[ -n "$asset" ]] || continue
             code=$(curl -sS -o /dev/null -w '%{http_code}' "${BASE}/assets/${asset}")
-            test "$code" = '200'
-            curl -sSI "${BASE}/assets/${asset}" | tr -d '\r' | grep -qi 'cache-control:.*max-age=31536000.*immutable'
+            if [[ "$code" != '200' ]]; then
+              echo "Production route stylesheet ${asset} returned ${code}." >&2
+              exit 1
+            fi
+            curl -sSI "${BASE}/assets/${asset}" | tr -d '\r' | grep -qi 'cache-control:.*max-age=31536000.*immutable' || {
+              echo "Production route stylesheet ${asset} is missing immutable cache headers." >&2
+              exit 1
+            }
           done <<< "$route_assets"
 
-          curl -sSI "${BASE}/index.html" | tr -d '\r' | grep -qi 'cache-control:.*max-age=0.*must-revalidate'
+          curl -sSI "${BASE}/index.html" | tr -d '\r' | grep -qi 'cache-control:.*max-age=0.*must-revalidate' || {
+            echo 'Production index HTML is missing the required revalidation cache policy.' >&2
+            exit 1
+          }
           echo 'Cloudflare HTML revalidation and immutable split-asset caching verified.'
 
       - name: Verify Vercel fallback routes remain reachable
