@@ -1,9 +1,15 @@
 import { IMAGES } from '../app/site-config.js';
 
-const configuredOrigin = typeof process !== 'undefined' ? process.env?.PUBLIC_ORIGIN : '';
+const environment = typeof process !== 'undefined' ? process.env || {} : {};
+const configuredOrigin = environment.PUBLIC_ORIGIN || '';
+const workersBuildBranch = String(environment.WORKERS_CI_BRANCH || '').trim();
 
 export const SITE_NAME = 'RC IT Services';
 export const SITE_ORIGIN = String(configuredOrigin || 'https://rcitcservices.frsmkgit.workers.dev').replace(/\/+$/, '');
+
+// Cloudflare Workers Builds exposes WORKERS_CI_BRANCH. Non-main branch builds are
+// preview deployments and must never become a second indexable copy of production.
+export const DEPLOYMENT_SEARCH_INDEXING_ENABLED = !workersBuildBranch || workersBuildBranch === 'main';
 
 // Keep individual vacancy URLs crawlable but out of search results until the real
 // application workflow is enabled. Google JobPosting markup requires an open job
