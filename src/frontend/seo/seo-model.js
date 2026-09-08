@@ -107,6 +107,28 @@ function employmentType(value = '') {
   return String(value || 'OTHER').toUpperCase().replace(/[^A-Z]+/g, '_');
 }
 
+function htmlListSection(label, items = []) {
+  const values = items.filter(Boolean);
+  if (!values.length) return '';
+  return `<p>${esc(label)}</p><ul>${values.map((item) => `<li>${esc(item)}</li>`).join('')}</ul>`;
+}
+
+function jobDescriptionHtml(job) {
+  const parts = [
+    `<p>${esc(job.summary)}</p>`,
+    ...(job.description || []).map((paragraph) => `<p>${esc(paragraph)}</p>`),
+    job.experience ? `<p>Experience: ${esc(job.experience)}</p>` : '',
+    htmlListSection('Responsibilities', job.responsibilities),
+    htmlListSection('Qualifications', job.qualifications),
+    htmlListSection('Preferred qualifications', job.preferredQualifications),
+    htmlListSection('Technology and skills', job.technologies),
+    htmlListSection('Working style', job.workingStyle),
+    job.locationDetails ? `<p>Location: ${esc(job.locationDetails)}</p>` : '',
+    htmlListSection('Employment terms', job.benefits)
+  ];
+  return parts.filter(Boolean).join('');
+}
+
 function jobDescriptor(path, job) {
   return descriptor(path, {
     label: job.title,
@@ -119,15 +141,13 @@ function jobDescriptor(path, job) {
 
 function applicationDescriptor(path, job) {
   const jobPath = `/careers/jobs/${job.slug}`;
-  const result = descriptor(path, {
+  return descriptor(path, {
     label: `Apply for ${job.title}`,
     title: `Apply for ${job.title} | RC IT Services`,
     description: `Application route for the published ${job.title} vacancy at RC IT Services.`,
     image: IMAGES.careersResume || IMAGES.careers,
     index: false
   }, { kind: 'job-application', job, parentPath: jobPath, parentLabel: job.title });
-  result.canonical = canonicalUrl(jobPath);
-  return result;
 }
 
 export function getSeoForRoute(pathName) {
@@ -247,7 +267,7 @@ function jobPostingSchema(seo) {
     '@type': 'JobPosting',
     '@id': `${seo.canonical}#job`,
     title: job.title,
-    description: text([job.summary, ...(job.description || [])].join(' ')),
+    description: jobDescriptionHtml(job),
     datePosted: job.postedDate,
     employmentType: employmentType(job.employmentType),
     identifier: {
@@ -266,7 +286,12 @@ function jobPostingSchema(seo) {
     },
     url: seo.canonical
   };
-  if (job.closingDate) posting.validThrough = `${job.closingDate}T23:59:59+01:00`;
+
+  if (job.responsibilities?.length) posting.responsibilities = text(job.responsibilities.join(' '));
+  if (job.qualifications?.length) posting.qualifications = text(job.qualifications.join(' '));
+  if (job.technologies?.length) posting.skills = text(job.technologies.join(', '));
+  if (job.experience) posting.experienceRequirements = text(job.experience);
+  if (job.closingDate) posting.validThrough = job.closingDate;
   return posting;
 }
 
@@ -305,7 +330,8 @@ export function renderSeoHead(pathName) {
     `<meta name="robots" content="${robots}" />`,
     `<link rel="canonical" href="${esc(seo.canonical)}" />`,
     `<meta property="og:site_name" content="${SITE_NAME}" />`,
-    `<meta property="og:type" content="${seo.kind === 'job' ? 'website' : 'website'}" />`,
+    '<meta property="og:type" content="website" />',
+    '<meta property="og:locale" content="en_GB" />',
     `<meta property="og:title" content="${esc(seo.title)}" />`,
     `<meta property="og:description" content="${esc(seo.description)}" />`,
     `<meta property="og:url" content="${esc(seo.canonical)}" />`,
@@ -337,8 +363,6 @@ export function renderRobotsTxt() {
     'Allow: /',
     'Disallow: /api/',
     'Disallow: /admin/',
-    'Disallow: /login',
-    'Disallow: /careers/jobs/*/apply',
     `Sitemap: ${SITE_ORIGIN}/sitemap.xml`,
     ''
   ].join('\n');
