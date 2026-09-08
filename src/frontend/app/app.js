@@ -1,29 +1,40 @@
 import { routeContent } from '../router/router.js';
 import { siteShell } from '../layouts/site-shell.js';
 import { bindDesktopNav, bindMobileNav } from './interactions-nav.js';
-import { bindContactOptions, bindLogin } from './interactions-page.js';
-import { bindCareerRoleBrowser } from './interactions-careers.js';
-import { bindCareerFilters } from './interactions-career-filters.js';
-import { bindForms } from './forms.js';
-import { bindDialogTriggers, bindAccordions } from './ui.js';
-import { applyServicePageEnhancements } from './service-page-enhancements.js';
+import { bindRouteEnhancements } from './route-enhancements.js';
+import { ensureRouteStyles } from './route-styles.js';
 
 function normalisePath(path = '/') {
   const clean = path.replace(/\/+$/, '') || '/';
   return clean === '/index.php' ? '/' : clean;
 }
 
-const root = document.getElementById('site-root');
-const pathName = normalisePath(location.pathname);
-root.innerHTML = siteShell(pathName, routeContent(pathName));
+function renderLoadFailure(root, pathName) {
+  const content = `<main id="main-content"><section class="section"><div class="container"><div class="empty-state"><h1>Page temporarily unavailable</h1><p>The page could not be loaded. Refresh the page to try again.</p></div></div></section></main>`;
+  root.innerHTML = siteShell(pathName, content);
+  bindDesktopNav();
+  bindMobileNav();
+}
 
-applyServicePageEnhancements(pathName);
-bindDesktopNav();
-bindMobileNav();
-bindDialogTriggers();
-bindAccordions();
-bindForms();
-bindContactOptions();
-bindCareerRoleBrowser();
-bindCareerFilters();
-bindLogin();
+async function bootstrap() {
+  const root = document.getElementById('site-root');
+  if (!root) return;
+
+  const pathName = normalisePath(location.pathname);
+  try {
+    const [content] = await Promise.all([
+      routeContent(pathName),
+      ensureRouteStyles(pathName)
+    ]);
+
+    root.innerHTML = siteShell(pathName, content);
+    bindDesktopNav();
+    bindMobileNav();
+    await bindRouteEnhancements(pathName);
+  } catch (error) {
+    console.error('RC IT Services page bootstrap failed.', error);
+    renderLoadFailure(root, pathName);
+  }
+}
+
+bootstrap();

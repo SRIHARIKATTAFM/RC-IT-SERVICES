@@ -41,6 +41,9 @@ jobs:
       - name: Build optimized production assets
         run: npm run build
 
+      - name: Enforce production performance budgets
+        run: npm run test:performance
+
       - name: Verify production bundle and Cloudflare configuration
         run: |
           test -f dist/index.html
@@ -51,6 +54,7 @@ jobs:
           test -f src/frontend/styles/app.css
           test -f src/backend/runtime/worker.js
           grep -q 'site-root' dist/index.html
+          grep -q 'data-route-styles' dist/index.html
           grep -q 'single-page-application' wrangler.jsonc
           grep -q 'rcitcservices' wrangler.jsonc
           grep -q 'serveApplication' worker/index.js
@@ -104,6 +108,16 @@ jobs:
             fi
             sleep 5
           done
+
+      - name: Verify production cache policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://rcitcservices.frsmkgit.workers.dev'
+          curl -L -sS "${BASE}/" -o /tmp/rc-index.html
+          asset=$(grep -oE '/assets/app-[A-Za-z0-9]+\.js' /tmp/rc-index.html | head -n1)
+          test -n "$asset"
+          curl -sSI "${BASE}${asset}" | tr -d '\r' | grep -qi 'cache-control:.*max-age=31536000.*immutable'
 
       - name: Verify Vercel fallback routes remain reachable
         shell: bash

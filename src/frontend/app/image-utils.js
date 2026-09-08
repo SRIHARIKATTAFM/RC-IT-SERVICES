@@ -9,7 +9,8 @@ function esc(value = '') {
 
 function withWidth(src, width) {
   try {
-    const url = new URL(src, window.location.origin);
+    const base = globalThis.location?.origin || 'https://rc-it-services.invalid';
+    const url = new URL(src, base);
     const host = url.hostname.toLowerCase();
     if (host === 'images.pexels.com') {
       url.searchParams.set('auto', 'compress');
@@ -31,7 +32,7 @@ function withWidth(src, width) {
 }
 
 function responsiveSet(src) {
-  const widths = [480, 720, 960, 1280, 1600];
+  const widths = [320, 480, 720, 960, 1280, 1600];
   const candidates = widths.map((width) => `${withWidth(src, width)} ${width}w`);
   return candidates.every((candidate) => candidate.startsWith(src)) ? '' : candidates.join(', ');
 }
@@ -47,5 +48,6 @@ export function responsiveImageMarkup(src, alt, {
 } = {}) {
   const srcset = responsiveSet(src);
   const optimizedSrc = withWidth(src, 1280);
-  return `<img src="${esc(optimizedSrc)}"${srcset ? ` srcset="${esc(srcset)}" sizes="${esc(sizes)}"` : ''} alt="${esc(alt)}" width="${width}" height="${height}" loading="${esc(loading)}" decoding="async" fetchpriority="${esc(fetchPriority)}"${className ? ` class="${esc(className)}"` : ''} ${extra}>`;
+  const priority = fetchPriority === 'auto' ? '' : ` fetchpriority="${esc(fetchPriority)}"`;
+  return `<img src="${esc(optimizedSrc)}"${srcset ? ` srcset="${esc(srcset)}" sizes="${esc(sizes)}"` : ''} alt="${esc(alt)}" width="${width}" height="${height}" loading="${esc(loading)}" decoding="async"${priority}${className ? ` class="${esc(className)}"` : ''}${extra ? ` ${extra}` : ''}>`;
 }

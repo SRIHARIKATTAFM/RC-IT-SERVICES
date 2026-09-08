@@ -2,11 +2,6 @@
 @import "./tokens.css";
 @import "./base.css";
 @import "./components.css";
-@import "./service-detail.css";
-@import "./careers.css";
-@import "./career-switch.css";
-@import "./career-filters.css";
-@import "./legal.css";
 @import "./responsive.css";
 @import "./audit-fixes.css";
 @import "./bootstrap-overrides.css";

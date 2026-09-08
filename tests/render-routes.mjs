@@ -1,5 +1,7 @@
 globalThis.document = { title: '' };
 
+globalThis.location = { origin: 'https://rc-it-services.test' };
+
 const { routeContent } = await import('../src/frontend/router/router.js');
 const { ALL_ROUTES, LEGACY_ROUTE_ALIASES } = await import('../src/frontend/app/site-config.js');
 const { SERVICE_PAGES } = await import('../src/frontend/app/pages.js');
@@ -40,16 +42,16 @@ for (const alias of LEGACY_ROUTE_ALIASES) {
 }
 
 for (const route of ALL_ROUTES) {
-  assertPage(route, routeContent(route));
+  assertPage(route, await routeContent(route));
 }
 
 for (const route of LEGACY_ROUTE_ALIASES) {
-  assertPage(route, routeContent(route));
+  assertPage(route, await routeContent(route));
 }
 
 let serviceDetailCount = 0;
 for (const [serviceRoute, page] of Object.entries(SERVICE_PAGES)) {
-  const serviceHtml = routeContent(serviceRoute);
+  const serviceHtml = await routeContent(serviceRoute);
   assertPage(serviceRoute, serviceHtml);
   assert(serviceHtml.includes(escapeHtml(page.title)), `${serviceRoute} does not render its configured service title`);
 
@@ -58,7 +60,7 @@ for (const [serviceRoute, page] of Object.entries(SERVICE_PAGES)) {
 
   for (const capability of page.howWeHelp || []) {
     const route = `${serviceRoute}/${capability.slug}`;
-    const html = routeContent(route);
+    const html = await routeContent(route);
     assertPage(route, html);
     assert(html.includes(escapeHtml(capability.title)), `${route} does not render its configured capability title`);
     serviceDetailCount += 1;
@@ -72,8 +74,8 @@ assertUnique(jobs.map((job) => job.jobCode).filter(Boolean), 'Published job code
 for (const job of jobs) {
   const detailRoute = `/careers/jobs/${job.slug}`;
   const applicationRoute = `/careers/jobs/${job.slug}/apply`;
-  const detailHtml = routeContent(detailRoute);
-  const applicationHtml = routeContent(applicationRoute);
+  const detailHtml = await routeContent(detailRoute);
+  const applicationHtml = await routeContent(applicationRoute);
 
   assertPage(detailRoute, detailHtml);
   assertPage(applicationRoute, applicationHtml);
@@ -81,27 +83,27 @@ for (const job of jobs) {
   assert(applicationHtml.includes(`Apply for ${escapeHtml(job.title)}`), `${applicationRoute} lost job-specific application context`);
 }
 
-const careersHtml = routeContent('/careers');
+const careersHtml = await routeContent('/careers');
 assert(careersHtml.includes('Current openings'), 'Careers page lost the current openings experience');
 assert(!careersHtml.includes('Upload your Resume</a>'), 'Careers page regressed to the old standalone resume-upload journey');
 
-const faqHtml = routeContent('/faqs');
+const faqHtml = await routeContent('/faqs');
 assert(faqHtml.includes('RC does not use a separate speculative resume-upload page.'), 'FAQ still describes the retired resume-upload workflow');
 
-const contactHtml = routeContent('/contact');
+const contactHtml = await routeContent('/contact');
 assert(contactHtml.includes('Consultation topic *'), 'Contact page lost the unified consultation topic field');
 assert(contactHtml.includes('name="email"'), 'Contact page must use the Email field');
 assert(!contactHtml.includes('Business Email'), 'Contact page regressed to Business Email wording');
 assert(!contactHtml.includes('Company / Organisation *'), 'Company / Organisation must remain optional');
 assert(!contactHtml.includes('Job Title *'), 'Job Title must remain optional');
 
-const legacyCareerHtml = routeContent('/careers/upload-your-resume');
+const legacyCareerHtml = await routeContent('/careers/upload-your-resume');
 assert(legacyCareerHtml.includes('Current openings'), 'Legacy resume URL no longer resolves to the consolidated Careers experience');
 
-const legacyConsultHtml = routeContent('/consult-expert');
+const legacyConsultHtml = await routeContent('/consult-expert');
 assert(legacyConsultHtml.includes('Consultation topic *'), 'Legacy Consult our Expert URL no longer resolves to unified Contact');
 
-const notFound = routeContent('/route-that-does-not-exist');
+const notFound = await routeContent('/route-that-does-not-exist');
 assert(notFound.includes('Page not found'), 'Unknown route did not render the not-found page');
 
-console.log(`PASS: ${ALL_ROUTES.length} canonical routes, ${LEGACY_ROUTE_ALIASES.length} compatibility aliases, ${serviceDetailCount} service detail routes and ${jobs.length * 2} career detail/application routes rendered successfully with Phase 3 route/content invariants.`);
+console.log(`PASS: ${ALL_ROUTES.length} canonical routes, ${LEGACY_ROUTE_ALIASES.length} compatibility aliases, ${serviceDetailCount} service detail routes and ${jobs.length * 2} career detail/application routes rendered successfully with async Phase 5 route splitting and Phase 3 content invariants.`);

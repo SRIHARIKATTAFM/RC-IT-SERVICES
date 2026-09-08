@@ -1,6 +1,6 @@
 {
   "name": "rc-it-services",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,9 +10,11 @@
     "test:smoke": "node tests/smoke.mjs",
     "test:render": "node tests/render-routes.mjs",
     "test:design-system": "node tests/design-system.mjs",
-    "test": "npm run test:smoke && npm run test:render && npm run test:design-system",
+    "test:performance-routing": "node tests/performance-routing.mjs",
+    "test:performance": "node scripts/check-performance.mjs",
+    "test": "npm run test:smoke && npm run test:render && npm run test:design-system && npm run test:performance-routing",
     "build": "node scripts/build.mjs",
-    "verify": "npm run check:architecture && npm test && npm run build"
+    "verify": "npm run check:architecture && npm test && npm run build && npm run test:performance"
   },
   "dependencies": {
     "bootstrap": "^5.3.8"
