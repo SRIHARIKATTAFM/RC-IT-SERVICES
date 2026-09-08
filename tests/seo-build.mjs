@@ -51,8 +51,10 @@ assert(!sitemap.includes('/apply</loc>'), 'Application route leaked into generat
 
 const robots = await readFile(path.join(dist, 'robots.txt'), 'utf8');
 assert(robots.includes(`Sitemap: ${SITE_ORIGIN}/sitemap.xml`), 'Generated robots.txt has the wrong sitemap origin.');
+assert(robots.includes('Disallow: /api/'), 'API robots rule missing.');
 assert(robots.includes('Disallow: /admin/'), 'Admin robots rule missing.');
-assert(robots.includes('Disallow: /careers/jobs/*/apply'), 'Application robots rule missing.');
+assert(!robots.includes('Disallow: /login'), 'Login must remain crawlable so its noindex directive can be observed.');
+assert(!robots.includes('Disallow: /careers/jobs/*/apply'), 'Application routes must remain crawlable so their noindex directives can be observed.');
 
 const redirects = await readFile(path.join(dist, '_redirects'), 'utf8');
 for (const alias of ['/consult-expert', '/careers/job-opportunities', '/careers/upload-your-resume', '/index.php']) {
@@ -68,9 +70,14 @@ const firstJob = getPublishedJobs()[0];
 assert(firstJob, 'At least one published job is required for JobPosting build verification.');
 const jobHtml = await readFile(outputPath(`/careers/jobs/${firstJob.slug}`), 'utf8');
 assert(jobHtml.includes('JobPosting'), 'Published job HTML is missing JobPosting structured data.');
+assert(jobHtml.includes('Responsibilities') && jobHtml.includes('Qualifications'), 'Published job structured data does not contain the full job-description sections.');
+
+const applicationHtml = await readFile(outputPath(`/careers/jobs/${firstJob.slug}/apply`), 'utf8');
+assert(applicationHtml.includes('noindex,nofollow'), 'Application HTML lost its noindex directive.');
+assert(applicationHtml.includes(`rel="canonical" href="${SITE_ORIGIN}/careers/jobs/${firstJob.slug}/apply"`), 'Application HTML lost its self canonical.');
 
 const serviceHtml = await readFile(outputPath('/services/it/cyber-security'), 'utf8');
 assert(serviceHtml.includes('"@type":"Service"'), 'Service page HTML is missing Service structured data.');
 assert(serviceHtml.includes('BreadcrumbList'), 'Service page HTML is missing BreadcrumbList structured data.');
 
-console.log(`PASS: ${prerenderRoutes.length} prerendered HTML routes, ${sitemapLocations.length} sitemap URLs, robots directives, redirects, structured data and real 404 output verified.`);
+console.log(`PASS: ${prerenderRoutes.length} prerendered HTML routes, ${sitemapLocations.length} sitemap URLs, crawl/noindex directives, redirects, structured data and real 404 output verified.`);
