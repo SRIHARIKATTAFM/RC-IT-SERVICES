@@ -83,4 +83,9 @@ const serviceHtml = await readFile(outputPath('/services/it/cyber-security'), 'u
 assert(serviceHtml.includes('"@type":"Service"'), 'Service page HTML is missing Service structured data.');
 assert(serviceHtml.includes('BreadcrumbList'), 'Service page HTML is missing BreadcrumbList structured data.');
 
-console.log(`PASS: ${prerenderRoutes.length} prerendered HTML routes, ${sitemapLocations.length} currently eligible sitemap URLs, crawl/noindex directives, redirects, structured data and real 404 output verified.`);
+const vercelConfig = JSON.parse(await readFile(path.join(root, 'vercel.json'), 'utf8'));
+const fallbackHeaders = vercelConfig.headers?.find((entry) => entry.source === '/(.*)')?.headers || [];
+const fallbackRobots = fallbackHeaders.find((header) => header.key.toLowerCase() === 'x-robots-tag')?.value;
+assert(fallbackRobots === 'noindex, nofollow', 'Secondary Vercel fallback lost its global noindex response header.');
+
+console.log(`PASS: ${prerenderRoutes.length} prerendered HTML routes, ${sitemapLocations.length} currently eligible sitemap URLs, crawl/noindex directives, redirects, structured data, fallback isolation and real 404 output verified.`);
