@@ -140,8 +140,9 @@ jobs:
           grep -q 'BreadcrumbList' /tmp/service.html
 
           curl -sS "${BASE}/careers/jobs/senior-data-engineer" -o /tmp/job.html
-          grep -q 'JobPosting' /tmp/job.html
           grep -q "rel=\"canonical\" href=\"${BASE}/careers/jobs/senior-data-engineer\"" /tmp/job.html
+          grep -q 'name="robots" content="noindex,nofollow"' /tmp/job.html
+          ! grep -q '"@type":"JobPosting"' /tmp/job.html
 
           curl -sS "${BASE}/login" -o /tmp/login.html
           grep -q 'name="robots" content="noindex,nofollow"' /tmp/login.html
@@ -151,10 +152,11 @@ jobs:
           grep -q "${BASE}/services/it/cyber-security" /tmp/sitemap.xml
           ! grep -q "${BASE}/login" /tmp/sitemap.xml
           ! grep -q '/apply</loc>' /tmp/sitemap.xml
+          ! grep -q "${BASE}/careers/jobs/senior-data-engineer</loc>" /tmp/sitemap.xml
 
           curl -sS "${BASE}/robots.txt" -o /tmp/robots.txt
           ! grep -q 'Disallow: /login' /tmp/robots.txt
-          ! grep -q '/apply' /tmp/robots.txt
+          ! grep -q 'Disallow: /careers/jobs/' /tmp/robots.txt
           grep -q 'Disallow: /api/' /tmp/robots.txt
           grep -q 'Disallow: /admin/' /tmp/robots.txt
           grep -q "Sitemap: ${BASE}/sitemap.xml" /tmp/robots.txt
@@ -168,7 +170,7 @@ jobs:
           [[ "$alias_code" == '301' || "$alias_code" == '308' ]]
           curl -sSI "${BASE}/careers/job-opportunities" | tr -d '\r' | grep -qi '^location:.*\/careers'
 
-          echo 'Production metadata, schema, sitemap, robots, redirects and real 404 behaviour verified.'
+          echo 'Production metadata, eligibility gating, schema, sitemap, robots, redirects and real 404 behaviour verified.'
 
       - name: Verify production cache policy and split assets
         shell: bash
@@ -182,19 +184,34 @@ jobs:
             echo 'Hashed application JavaScript was not found in production HTML.' >&2
             exit 1
           fi
-          curl -sSI "${BASE}${app_asset}" | tr -d '\r' | grep -qi 'cache-control:.*max-age=31536000.*immutable'
+          curl -sSI "${BASE}${app_asset}" | tr -d '\r' | grep -qi 'cache-control:.*max-age=31536000.*immutable' || {
+            echo 'Application JavaScript is missing immutable cache headers.' >&2
+            exit 1
+          }
 
           route_assets=$(grep -oE 'route-(careers|services|legal)-[A-Za-z0-9]+\.css' /tmp/rc-index.html | sort -u)
           route_count=$(printf '%s\n' "$route_assets" | sed '/^$/d' | wc -l | tr -d ' ')
-          test "$route_count" = '3'
+          if [[ "$route_count" != '3' ]]; then
+            echo "Expected 3 production route stylesheets; found ${route_count}." >&2
+            exit 1
+          fi
           while IFS= read -r asset; do
             [[ -n "$asset" ]] || continue
             code=$(curl -sS -o /dev/null -w '%{http_code}' "${BASE}/assets/${asset}")
-            test "$code" = '200'
-            curl -sSI "${BASE}/assets/${asset}" | tr -d '\r' | grep -qi 'cache-control:.*max-age=31536000.*immutable'
+            if [[ "$code" != '200' ]]; then
+              echo "Production route stylesheet ${asset} returned ${code}." >&2
+              exit 1
+            fi
+            curl -sSI "${BASE}/assets/${asset}" | tr -d '\r' | grep -qi 'cache-control:.*max-age=31536000.*immutable' || {
+              echo "Production route stylesheet ${asset} is missing immutable cache headers." >&2
+              exit 1
+            }
           done <<< "$route_assets"
 
-          curl -sSI "${BASE}/about-us" | tr -d '\r' | grep -qi 'cache-control:.*max-age=0.*must-revalidate'
+          curl -sSI "${BASE}/about-us" | tr -d '\r' | grep -qi 'cache-control:.*max-age=0.*must-revalidate' || {
+            echo 'Production prerendered HTML is missing the required revalidation cache policy.' >&2
+            exit 1
+          }
           echo 'Cloudflare prerendered HTML revalidation and immutable split-asset caching verified.'
 
       - name: Verify Vercel fallback routes remain reachable
