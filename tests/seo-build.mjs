@@ -54,7 +54,7 @@ assert(robots.includes(`Sitemap: ${SITE_ORIGIN}/sitemap.xml`), 'Generated robots
 assert(robots.includes('Disallow: /api/'), 'API robots rule missing.');
 assert(robots.includes('Disallow: /admin/'), 'Admin robots rule missing.');
 assert(!robots.includes('Disallow: /login'), 'Login must remain crawlable so its noindex directive can be observed.');
-assert(!robots.includes('Disallow: /careers/jobs/*/apply'), 'Application routes must remain crawlable so their noindex directives can be observed.');
+assert(!robots.includes('Disallow: /careers/jobs/'), 'Job and application routes must remain crawlable so their noindex directives can be observed.');
 
 const redirects = await readFile(path.join(dist, '_redirects'), 'utf8');
 for (const alias of ['/consult-expert', '/careers/job-opportunities', '/careers/upload-your-resume', '/index.php']) {
@@ -67,17 +67,20 @@ assert(notFound.includes('noindex,nofollow'), 'Custom 404 is not noindex.');
 assert(notFound.includes('Page not found'), 'Custom 404 user-facing content missing.');
 
 const firstJob = getPublishedJobs()[0];
-assert(firstJob, 'At least one published job is required for JobPosting build verification.');
-const jobHtml = await readFile(outputPath(`/careers/jobs/${firstJob.slug}`), 'utf8');
-assert(jobHtml.includes('JobPosting'), 'Published job HTML is missing JobPosting structured data.');
-assert(jobHtml.includes('Responsibilities') && jobHtml.includes('Qualifications'), 'Published job structured data does not contain the full job-description sections.');
+assert(firstJob, 'At least one published job is required for gated job-route build verification.');
+const jobPath = `/careers/jobs/${firstJob.slug}`;
+const jobHtml = await readFile(outputPath(jobPath), 'utf8');
+assert(jobHtml.includes('noindex,nofollow'), 'Job HTML must remain noindex until application submission is available.');
+assert(jobHtml.includes(`rel="canonical" href="${SITE_ORIGIN}${jobPath}"`), 'Job HTML lost its self canonical.');
+assert(!jobHtml.includes('"@type":"JobPosting"'), 'Ineligible job HTML must not emit JobPosting structured data.');
+assert(!sitemap.includes(`${SITE_ORIGIN}${jobPath}</loc>`), 'Ineligible job leaked into generated sitemap.');
 
-const applicationHtml = await readFile(outputPath(`/careers/jobs/${firstJob.slug}/apply`), 'utf8');
+const applicationHtml = await readFile(outputPath(`${jobPath}/apply`), 'utf8');
 assert(applicationHtml.includes('noindex,nofollow'), 'Application HTML lost its noindex directive.');
-assert(applicationHtml.includes(`rel="canonical" href="${SITE_ORIGIN}/careers/jobs/${firstJob.slug}/apply"`), 'Application HTML lost its self canonical.');
+assert(applicationHtml.includes(`rel="canonical" href="${SITE_ORIGIN}${jobPath}/apply"`), 'Application HTML lost its self canonical.');
 
 const serviceHtml = await readFile(outputPath('/services/it/cyber-security'), 'utf8');
 assert(serviceHtml.includes('"@type":"Service"'), 'Service page HTML is missing Service structured data.');
 assert(serviceHtml.includes('BreadcrumbList'), 'Service page HTML is missing BreadcrumbList structured data.');
 
-console.log(`PASS: ${prerenderRoutes.length} prerendered HTML routes, ${sitemapLocations.length} sitemap URLs, crawl/noindex directives, redirects, structured data and real 404 output verified.`);
+console.log(`PASS: ${prerenderRoutes.length} prerendered HTML routes, ${sitemapLocations.length} currently eligible sitemap URLs, crawl/noindex directives, redirects, structured data and real 404 output verified.`);
