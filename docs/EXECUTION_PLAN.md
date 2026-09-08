@@ -30,8 +30,8 @@ Each phase is reviewed from all of these perspectives:
 - [x] ~~Phase 2 — Structured project foundation~~ — COMPLETED & VERIFIED
 - [x] ~~Phase 3 — Frontend page-by-page migration~~ — COMPLETED & VERIFIED
 - [x] ~~Phase 4 — Shared components and design-system cleanup~~ — COMPLETED & VERIFIED
-- [ ] Phase 5 — Performance optimization
-- [ ] Phase 6 — SEO architecture
+- [x] ~~Phase 5 — Performance optimization~~ — COMPLETED & VERIFIED
+- [x] ~~Phase 6 — SEO architecture~~ — COMPLETED & VERIFIED
 - [ ] Phase 7 — Backend foundation
 - [ ] Phase 8 — Database and storage architecture
 - [ ] Phase 9 — Admin authentication and security
@@ -244,6 +244,18 @@ Reduce page weight and work performed on routes that do not need it.
 - CLS < 0.1 target
 - Lighthouse Performance 90+ target where reproducible
 
+### Verification record
+- route-level JavaScript and route-specific CSS splitting implemented
+- route-specific interaction loading implemented
+- responsive image and immutable hashed-asset caching contracts implemented
+- production HTML revalidation verified
+- compressed production bundle budgets enforced in CI
+- final live Cloudflare verification passed after the production-verification race was corrected
+- detailed implementation, production evidence and all-role review are recorded in `docs/PHASE_5_VERIFICATION.md`
+
+### Status
+`~~Phase 5 — Performance optimization~~ — COMPLETED & VERIFIED`
+
 ---
 
 ## Phase 6 — SEO architecture
@@ -259,17 +271,46 @@ Make public content consistently crawlable, indexable and semantically clear.
 - Organization/WebSite/WebPage schema
 - Service schema
 - BreadcrumbList
-- JobPosting schema
+- JobPosting schema with production eligibility gating
 - sitemap generation
 - robots rules
 - redirect and 404 hygiene
 - internal-link checks
+- non-main preview indexing isolation
+- secondary-origin indexing isolation
 
 ### Acceptance criteria
-- every public indexable route has explicit metadata
-- private/admin routes are noindex
-- published jobs have canonical URLs and JobPosting schema
-- sitemap contains only intended public routes
+- every currently indexable public route has explicit metadata
+- private/non-search routes are noindex without using robots as a security boundary
+- job-detail routes have canonical URLs; JobPosting output is enabled only when the vacancy is genuinely active and the real application workflow is operational
+- sitemap contains only currently intended indexable public routes
+- legacy aliases redirect permanently to canonical routes
+- unknown routes return a genuine HTTP 404 rather than a SPA 200 fallback
+- Cloudflare branch previews cannot become a second indexable copy
+- Phase 5 performance boundaries remain intact
+
+### Verification record
+- `src/frontend/seo/seo-config.js` and `src/frontend/seo/seo-model.js` established as the SEO source of truth
+- 158 build-time prerendered route HTML files generated
+- 65 URLs currently eligible for the production sitemap/indexing model
+- 46 job-detail routes deliberately gated from indexing and JobPosting output until the real application workflow and active-vacancy criteria are satisfied
+- Login, job detail/application and 404 surfaces use explicit noindex behavior while remaining crawlable where noindex must be observed
+- Organization, WebSite, WebPage, Service and BreadcrumbList JSON-LD verified
+- candidate JobPosting builder implemented and regression-tested for complete approved vacancy content without premature production emission
+- sitemap, robots, permanent redirects, real 404 handling, clean URL policy and internal-link validation implemented
+- non-main Cloudflare builds are protected by a deployment search-indexing gate; preview tests verified zero indexable URLs
+- secondary Vercel fallback source configuration is globally noindex to prevent duplicate-origin competition
+- final Phase 6 PR head `49d57ded7cb65977e5f464d303fb35dcbd01458c` passed GitHub Actions run `34257448690` (run #113), including exact log review
+- verified Phase 6 build measured main JS 2.3 KiB gzip, global CSS 13.2 KiB gzip and 15.5 KiB combined initial JS + global CSS
+- PR #6 merged to production commit `94f93d46efdf232476b95fd57e89e5428ce61e17`
+- Cloudflare Workers production build `89dffb02-d561-4a6c-8f36-799f9e04d713`, version `e8eb68f1-e893-4712-9f7a-bcfa4824be31`, completed successfully
+- post-merge GitHub Actions run `34258146123` (run #114) passed both the build/test job and live production verification job
+- live production verification proved prerendered deep routes, metadata, Service/Breadcrumb schema, gated-job noindex behavior, sitemap/robots policy, permanent redirect behavior, genuine 404 status, immutable split-asset caching, HTML revalidation, API health and Vercel fallback reachability
+- detailed defect history, production evidence and all-role review are recorded in `docs/PHASE_6_VERIFICATION.md`
+- Phase 7 work was not started
+
+### Status
+`~~Phase 6 — SEO architecture~~ — COMPLETED & VERIFIED`
 
 ---
 
@@ -649,4 +690,4 @@ Before closing every phase:
 
 # Current status
 
-Phase 1, Phase 2, Phase 3 and Phase 4 are completed and verified. Phase 5 has not been started.
+Phase 1 through Phase 6 are completed and verified. Phase 7 has not been started.
