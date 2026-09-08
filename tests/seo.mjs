@@ -63,11 +63,18 @@ for (const job of publishedJobs) {
   const applicationPath = `${detailPath}/apply`;
   const jobSeo = getSeoForRoute(detailPath);
   const appSeo = getSeoForRoute(applicationPath);
+  const jobPosting = schemaGraphForRoute(detailPath).find((node) => node['@type'] === 'JobPosting');
+
   assert(jobSeo?.index === true, `Published job is not indexable: ${detailPath}`);
   assert(jobSeo.canonical === `${SITE_ORIGIN}${detailPath}`, `Published job canonical is wrong: ${detailPath}`);
-  assert(schemaGraphForRoute(detailPath).some((node) => node['@type'] === 'JobPosting'), `JobPosting schema missing: ${detailPath}`);
+  assert(jobPosting, `JobPosting schema missing: ${detailPath}`);
+  assert(jobPosting.description.includes('<p>') && jobPosting.description.includes('<ul>'), `JobPosting description must contain structured HTML: ${detailPath}`);
+  assert(jobPosting.description.includes('Responsibilities') && jobPosting.description.includes('Qualifications'), `JobPosting description is incomplete: ${detailPath}`);
+  assert(jobPosting.datePosted === job.postedDate, `JobPosting datePosted changed: ${detailPath}`);
+  assert(jobPosting.jobLocation?.address?.addressCountry === 'GB', `JobPosting country missing: ${detailPath}`);
+
   assert(appSeo?.index === false, `Job application route must be noindex: ${applicationPath}`);
-  assert(appSeo.canonical === jobSeo.canonical, `Job application canonical must point to the job detail: ${applicationPath}`);
+  assert(appSeo.canonical === `${SITE_ORIGIN}${applicationPath}`, `Job application route should use a self canonical while remaining noindex: ${applicationPath}`);
 }
 
 for (const servicePath of Object.keys(SERVICE_PAGES)) {
@@ -85,9 +92,11 @@ assert(!sitemap.includes(`${SITE_ORIGIN}/login`), 'Login leaked into sitemap.');
 assert(!sitemap.includes('/apply</loc>'), 'Application route leaked into sitemap.');
 
 const robots = renderRobotsTxt();
-for (const rule of ['Disallow: /api/', 'Disallow: /admin/', 'Disallow: /login', 'Disallow: /careers/jobs/*/apply', `Sitemap: ${SITE_ORIGIN}/sitemap.xml`]) {
+for (const rule of ['Disallow: /api/', 'Disallow: /admin/', `Sitemap: ${SITE_ORIGIN}/sitemap.xml`]) {
   assert(robots.includes(rule), `Robots rule missing: ${rule}`);
 }
+assert(!robots.includes('Disallow: /login'), 'Login must stay crawlable so crawlers can observe its noindex directive.');
+assert(!robots.includes('Disallow: /careers/jobs/*/apply'), 'Application pages must stay crawlable so crawlers can observe their noindex directive.');
 
 const redirects = renderRedirectsFile();
 for (const alias of [...LEGACY_ROUTE_ALIASES, '/index.php']) {
