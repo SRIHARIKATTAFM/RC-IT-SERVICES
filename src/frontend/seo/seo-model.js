@@ -117,13 +117,18 @@ function jobDescriptionHtml(job) {
   const parts = [
     `<p>${esc(job.summary)}</p>`,
     ...(job.description || []).map((paragraph) => `<p>${esc(paragraph)}</p>`),
+    job.department ? `<p>Department: ${esc(job.department)}</p>` : '',
+    job.location ? `<p>Location: ${esc(job.location)}</p>` : '',
+    job.workStyle ? `<p>Working arrangement: ${esc(job.workStyle)}</p>` : '',
+    job.employmentType ? `<p>Employment type: ${esc(job.employmentType)}</p>` : '',
     job.experience ? `<p>Experience: ${esc(job.experience)}</p>` : '',
+    htmlListSection('Technology and skills', job.technologies),
+    htmlListSection('Industry context', job.industries),
     htmlListSection('Responsibilities', job.responsibilities),
     htmlListSection('Qualifications', job.qualifications),
     htmlListSection('Preferred qualifications', job.preferredQualifications),
-    htmlListSection('Technology and skills', job.technologies),
     htmlListSection('Working style', job.workingStyle),
-    job.locationDetails ? `<p>Location: ${esc(job.locationDetails)}</p>` : '',
+    job.locationDetails ? `<p>Location details: ${esc(job.locationDetails)}</p>` : '',
     htmlListSection('Employment terms', job.benefits)
   ];
   return parts.filter(Boolean).join('');
@@ -201,6 +206,22 @@ export function breadcrumbsForRoute(pathName) {
   return crumbs;
 }
 
+function organizationPostalAddress() {
+  const parts = String(COMPANY.registeredOffice || '').split(',').map(text).filter(Boolean);
+  if (parts.length !== 4) {
+    throw new Error('COMPANY.registeredOffice must contain street, locality, region and postcode for Organization structured data.');
+  }
+  const [streetAddress, addressLocality, addressRegion, postalCode] = parts;
+  return {
+    '@type': 'PostalAddress',
+    streetAddress,
+    addressLocality,
+    addressRegion,
+    postalCode,
+    addressCountry: 'GB'
+  };
+}
+
 function organizationSchema() {
   return {
     '@type': 'Organization',
@@ -210,14 +231,7 @@ function organizationSchema() {
     identifier: COMPANY.companyNumber,
     url: `${SITE_ORIGIN}/`,
     description: 'Technology consulting, engineering and managed delivery across software, cloud, data, cyber security and business transformation.',
-    address: {
-      '@type': 'PostalAddress',
-      streetAddress: '93 Metcalfe Court John Harrison Way',
-      addressLocality: 'London',
-      addressRegion: 'England',
-      postalCode: 'SE10 0BZ',
-      addressCountry: 'GB'
-    }
+    address: organizationPostalAddress()
   };
 }
 
