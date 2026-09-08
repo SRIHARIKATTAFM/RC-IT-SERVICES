@@ -380,7 +380,7 @@ export function renderSitemapXml() {
 
 export function renderRobotsTxt() {
   if (!DEPLOYMENT_SEARCH_INDEXING_ENABLED) {
-    return ['User-agent: *', 'Disallow: /', ''].join('\n');
+    return ['User-agent: *', 'Allow: /', ''].join('\n');
   }
   return [
     'User-agent: *',
