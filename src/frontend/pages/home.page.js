@@ -1,10 +1,23 @@
 import { IMAGES } from '../app/site-config.js';
 import { HOME_CAPABILITIES, HOME_INDUSTRIES } from '../app/pages.js';
-import { sectionHeading, ctaPanel, arrow, esc } from '../app/components.js';
+import { ctaPanel, sectionHeading } from '../components/content.js';
+import { actionCard, capabilityCard, industryCard, trustItem } from '../components/cards.js';
+import { arrow } from '../components/core.js';
 import { pageTitle, imageTag } from '../app/render-helpers.js';
 
 export function renderHomePage() {
   pageTitle('Home');
+  const entryActions = [
+    ['01','Our Products','Explore workflow-focused cloud product areas for education and recruitment, then evaluate fit through a targeted demonstration.','/products'],
+    ['02','White Papers','Read practical perspectives on cloud modernisation, data engineering and responsible AI with architecture and operating context.','/white-papers'],
+    ['03','Consult our Expert','Bring an active technology decision, modernisation challenge, delivery constraint or specialist capability requirement into a focused discussion.','/contact?intent=consultation#contact-form']
+  ];
+  const partnerItems = [
+    ['Technology partners','Integration-ready architecture and clear ownership boundaries.'],
+    ['Delivery partners','Defined responsibilities, interfaces, quality gates and escalation paths.'],
+    ['Business partners','Transparent engagement scope and measurable delivery expectations.']
+  ];
+
   return `
     <main id="main-content">
       <section class="hero">
@@ -24,28 +37,22 @@ export function renderHomePage() {
 
       <section class="section home-entry-section"><div class="container">
         ${sectionHeading('Explore RC IT Services','Three ways to move from interest to a useful next step','Evaluate our product areas, read decision-oriented technology perspectives or bring an active business and technology problem directly into the unified contact and consultation route.')}
-        <div class="action-grid">
-          ${[
-            ['01','Our Products','Explore workflow-focused cloud product areas for education and recruitment, then evaluate fit through a targeted demonstration.','/products'],
-            ['02','White Papers','Read practical perspectives on cloud modernisation, data engineering and responsible AI with architecture and operating context.','/white-papers'],
-            ['03','Consult our Expert','Bring an active technology decision, modernisation challenge, delivery constraint or specialist capability requirement into a focused discussion.','/contact?intent=consultation#contact-form']
-          ].map(([n,title,text,href]) => `<a class="action-card" href="${href}"><span class="action-card__number">${n}</span><span class="action-card__arrow">${arrow()}</span><h3>${title}</h3><p>${text}</p></a>`).join('')}
-        </div>
+        <div class="action-grid">${entryActions.map(([number,title,text,href]) => actionCard({ number, title, text, href })).join('')}</div>
       </div></section>
 
       <section class="section section--soft"><div class="container">
         ${sectionHeading('WHAT MAKES US DISTINCTIVELY US?', 'Technology capability with delivery discipline', 'Clarity in strategy, discipline in engineering and accountability in delivery shape how we approach every service area.')}
-        <div class="capability-grid">${HOME_CAPABILITIES.map((item) => `<article class="capability-card">${imageTag(item.image, `${item.title} professional technology context`, 'class="mini-photo"')}<h3>${esc(item.title)}</h3><p>${esc(item.text)}</p></article>`).join('')}</div>
+        <div class="capability-grid">${HOME_CAPABILITIES.map((item) => capabilityCard({ title: item.title, text: item.text, imageMarkup: imageTag(item.image, `${item.title} professional technology context`, 'class="mini-photo"') })).join('')}</div>
       </div></section>
 
       <section class="section"><div class="container">
         ${sectionHeading('WHAT INDUSTRY DO YOU BELONG TO?', 'Industry context changes the engineering decision', 'Automotive, financial services, media and education bring different security, data, integration, availability and operating requirements. Our delivery model adapts to that context.')}
-        <div class="industry-grid">${HOME_INDUSTRIES.map((item) => `<a class="industry-card" href="${item.href}">${imageTag(item.image, `${item.title} industry`)}<div class="industry-card__content"><h3>${esc(item.title)}</h3><p>${esc(item.text)}</p></div></a>`).join('')}</div>
+        <div class="industry-grid">${HOME_INDUSTRIES.map((item) => industryCard({ title: item.title, text: item.text, href: item.href, imageMarkup: imageTag(item.image, `${item.title} industry`) })).join('')}</div>
       </div></section>
 
       <section class="section section--blue"><div class="container">
         ${sectionHeading('Our Partners', 'Designed to work across client and partner ecosystems', 'Technology delivery often spans client teams, specialist providers and delivery partners. We establish clear responsibilities, interfaces, quality expectations and escalation paths across those boundaries.')}
-        <div class="trust-strip"><div class="trust-item"><strong>Technology partners</strong><span>Integration-ready architecture and clear ownership boundaries.</span></div><div class="trust-item"><strong>Delivery partners</strong><span>Defined responsibilities, interfaces, quality gates and escalation paths.</span></div><div class="trust-item"><strong>Business partners</strong><span>Transparent engagement scope and measurable delivery expectations.</span></div></div>
+        <div class="trust-strip">${partnerItems.map(([title,text]) => trustItem({ title, text })).join('')}</div>
       </div></section>
 
       <section class="section"><div class="container">

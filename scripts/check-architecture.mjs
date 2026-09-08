@@ -8,6 +8,19 @@ const required = [
   'src/frontend/app/app.js',
   'src/frontend/router/router.js',
   'src/frontend/styles/app.css',
+  'src/frontend/styles/tokens.css',
+  'src/frontend/components/index.js',
+  'src/frontend/components/core.js',
+  'src/frontend/components/brand.js',
+  'src/frontend/components/buttons.js',
+  'src/frontend/components/navigation.js',
+  'src/frontend/components/footer.js',
+  'src/frontend/components/layout.js',
+  'src/frontend/components/content.js',
+  'src/frontend/components/cards.js',
+  'src/frontend/components/forms.js',
+  'src/frontend/components/feedback.js',
+  'src/frontend/layouts/site-shell.js',
   'src/frontend/pages/home.page.js',
   'src/frontend/pages/about.page.js',
   'src/frontend/pages/contact.page.js',
@@ -41,6 +54,7 @@ const required = [
   'src/frontend/pages/support/cookies.page.js',
   'src/frontend/pages/support/terms.page.js',
   'src/frontend/pages/support/not-found.page.js',
+  'tests/design-system.mjs',
   'src/backend/runtime/worker.js',
   'src/backend/admin/README.md',
   'src/backend/api/README.md',
@@ -91,9 +105,27 @@ for (const moduleName of explicitPageImports) {
   }
 }
 
+const componentFacade = await readFile(path.join(root, 'src/frontend/app/components.js'), 'utf8');
+if (!componentFacade.includes("export * from '../components/index.js'")) {
+  throw new Error('Legacy component facade must delegate to the Phase 4 shared component index.');
+}
+if (componentFacade.includes('function headerTemplate') || componentFacade.includes('function footerTemplate')) {
+  throw new Error('Header/footer markup must be owned by shared Phase 4 component modules.');
+}
+
+const appSource = await readFile(path.join(root, 'src/frontend/app/app.js'), 'utf8');
+if (!appSource.includes("../layouts/site-shell.js") || !appSource.includes('siteShell(')) {
+  throw new Error('Public app shell must be composed by the shared site layout.');
+}
+
+const tokenSource = await readFile(path.join(root, 'src/frontend/styles/tokens.css'), 'utf8');
+for (const token of ['--space-4', '--container-narrow', '--control-height', '--field-height', '--z-dialog', '--focus-outline']) {
+  if (!tokenSource.includes(token)) throw new Error(`Required design-system token is missing: ${token}`);
+}
+
 const publicEntries = await readdir(path.join(root, 'public'));
 if (publicEntries.includes('js') || publicEntries.includes('css')) {
   throw new Error('Frontend source must not live under public/js or public/css after the structured-source migration.');
 }
 
-console.log(`PASS: complete structured page architecture verified (${required.length} required paths; legacy renderers removed; explicit route modules enforced).`);
+console.log(`PASS: structured page architecture + Phase 4 shared component/design-system ownership verified (${required.length} required paths).`);

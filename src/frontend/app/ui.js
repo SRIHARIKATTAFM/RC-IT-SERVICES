@@ -1,6 +1,7 @@
 import { dialogTemplate, toastClass } from '../components/feedback.js';
 
 let lastFocused = null;
+let dialogKeydownHandler = null;
 
 export function showToast(message, error = false) {
   const root = document.getElementById('toast-root');
@@ -16,6 +17,8 @@ export function showToast(message, error = false) {
 export function closeDialog() {
   const root = document.getElementById('dialog-root');
   if (!root) return;
+  if (dialogKeydownHandler) root.removeEventListener('keydown', dialogKeydownHandler);
+  dialogKeydownHandler = null;
   root.innerHTML = '';
   document.body.classList.remove('dialog-open');
   lastFocused?.focus?.();
@@ -26,6 +29,7 @@ export function openDialog(id, title, body) {
   lastFocused = document.activeElement;
   const root = document.getElementById('dialog-root');
   if (!root) return;
+  if (dialogKeydownHandler) root.removeEventListener('keydown', dialogKeydownHandler);
   root.innerHTML = dialogTemplate({ id, title, body });
   document.body.classList.add('dialog-open');
   const backdrop = root.querySelector('[data-dialog-backdrop]');
@@ -34,8 +38,12 @@ export function openDialog(id, title, body) {
   close?.focus();
   close?.addEventListener('click', closeDialog);
   backdrop?.addEventListener('mousedown', (event) => { if (event.target === backdrop) closeDialog(); });
-  root.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') closeDialog();
+
+  dialogKeydownHandler = (event) => {
+    if (event.key === 'Escape') {
+      closeDialog();
+      return;
+    }
     if (event.key === 'Tab' && dialog) {
       const focusable = [...dialog.querySelectorAll('button, a[href], input, textarea, select, [tabindex]:not([tabindex="-1"])')].filter((el) => !el.disabled);
       if (!focusable.length) return;
@@ -43,7 +51,8 @@ export function openDialog(id, title, body) {
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     }
-  }, { once: true });
+  };
+  root.addEventListener('keydown', dialogKeydownHandler);
 }
 
 export function bindDialogTriggers() {

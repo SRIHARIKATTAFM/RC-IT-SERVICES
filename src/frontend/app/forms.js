@@ -1,3 +1,4 @@
+import { field, formActions, textareaField } from '../components/forms.js';
 import { openDialog, showToast } from './ui.js';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
@@ -5,10 +6,10 @@ const PHONE = /^[+()\d\s.-]{7,30}$/;
 const TEXTAREA_MIN_HEIGHT = 145;
 const TEXTAREA_MAX_HEIGHT = 520;
 
-function setError(field, message = '') {
-  const wrapper = field.closest('.form-field');
+function setError(fieldElement, message = '') {
+  const wrapper = fieldElement.closest('.form-field');
   const error = wrapper?.querySelector('.field-error');
-  field.setAttribute('aria-invalid', message ? 'true' : 'false');
+  fieldElement.setAttribute('aria-invalid', message ? 'true' : 'false');
   if (error) error.textContent = message;
 }
 
@@ -24,20 +25,20 @@ function resizeTextarea(textarea) {
 function validate(form) {
   let ok = true;
   const fields = [...form.querySelectorAll('input, textarea, select')];
-  for (const field of fields) {
-    if (field.disabled || field.type === 'hidden' || field.type === 'submit') continue;
+  for (const fieldElement of fields) {
+    if (fieldElement.disabled || fieldElement.type === 'hidden' || fieldElement.type === 'submit') continue;
     let message = '';
-    if (field.required && field.type === 'checkbox' && !field.checked) message = 'This confirmation is required.';
-    else if (field.required && !String(field.value || '').trim()) message = 'This field is required.';
-    else if (field.type === 'email' && field.value && !EMAIL.test(field.value.trim())) message = 'Enter a valid email address.';
-    else if (field.dataset.type === 'phone' && field.value && !PHONE.test(field.value.trim())) message = 'Enter a valid phone number.';
-    else if (field.type === 'file' && field.files?.[0]) {
-      const file = field.files[0];
+    if (fieldElement.required && fieldElement.type === 'checkbox' && !fieldElement.checked) message = 'This confirmation is required.';
+    else if (fieldElement.required && !String(fieldElement.value || '').trim()) message = 'This field is required.';
+    else if (fieldElement.type === 'email' && fieldElement.value && !EMAIL.test(fieldElement.value.trim())) message = 'Enter a valid email address.';
+    else if (fieldElement.dataset.type === 'phone' && fieldElement.value && !PHONE.test(fieldElement.value.trim())) message = 'Enter a valid phone number.';
+    else if (fieldElement.type === 'file' && fieldElement.files?.[0]) {
+      const file = fieldElement.files[0];
       const allowed = ['application/pdf','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
       if (!allowed.includes(file.type)) message = 'Use PDF, DOC or DOCX.';
       else if (file.size > 5 * 1024 * 1024) message = 'File must be 5 MB or smaller.';
     }
-    setError(field, message);
+    setError(fieldElement, message);
     if (message) ok = false;
   }
   const firstInvalid = form.querySelector('[aria-invalid="true"]');
@@ -89,7 +90,7 @@ async function submitResume(form) {
   const status = form.querySelector('[data-form-status]');
   const button = form.querySelector('button[type="submit"]');
   const original = button?.textContent;
-  button.disabled = true; button.textContent = 'Uploading…';
+  if (button) { button.disabled = true; button.textContent = 'Uploading…'; }
   try {
     const base64 = await new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -112,7 +113,7 @@ async function submitResume(form) {
     showToast(message, true);
     if (status) { status.textContent = message; status.style.color = 'var(--color-danger)'; }
   } finally {
-    button.disabled = false; button.textContent = original;
+    if (button) { button.disabled = false; button.textContent = original; }
   }
 }
 
@@ -134,7 +135,7 @@ export function bindForms() {
       });
     });
 
-    form.querySelectorAll('input,select').forEach((field) => field.addEventListener('input', () => setError(field, '')));
+    form.querySelectorAll('input,select').forEach((fieldElement) => fieldElement.addEventListener('input', () => setError(fieldElement, '')));
   });
 
   document.querySelectorAll('[data-request-demo]:not([data-demo-bound])').forEach((button) => {
@@ -147,16 +148,13 @@ export function bindForms() {
             ${field('name','Name','text',true)}${field('company','Company','text',true)}
             ${field('businessEmail','Business Email','email',true)}${field('phone','Phone Number','tel',false,'phone')}
             <input type="hidden" name="product" value="${product.replaceAll('"','&quot;')}">
-            <div class="form-field form-field--full"><label for="demo-notes">What would you like to evaluate?</label><textarea id="demo-notes" name="notes"></textarea><span class="field-error"></span></div>
+            ${textareaField({ id: 'demo-notes', name: 'notes', label: 'What would you like to evaluate?' })}
           </div>
-          <div class="form-actions"><button class="btn btn--primary" type="submit">Submit</button><p class="form-status" data-form-status></p></div>
+          ${formActions({ submitLabel: 'Submit' })}
         </form>`);
       bindForms();
     });
   });
 }
 
-export function field(name, label, type = 'text', required = false, dataType = '') {
-  const id = `field-${name}-${Math.random().toString(36).slice(2,7)}`;
-  return `<div class="form-field"><label for="${id}">${label}${required ? ' *' : ''}</label><input id="${id}" name="${name}" type="${type}" ${required ? 'required' : ''} ${dataType ? `data-type="${dataType}"` : ''}><span class="field-error"></span></div>`;
-}
+export { field } from '../components/forms.js';

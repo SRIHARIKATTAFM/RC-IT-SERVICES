@@ -1,7 +1,25 @@
 import { COMPANY, IMAGES } from '../app/site-config.js';
-import { pageHero, sectionHeading, esc } from '../app/components.js';
-import { field } from '../app/forms.js';
+import { pageHero, sectionHeading } from '../components/content.js';
+import { esc } from '../components/core.js';
+import { consentField, field, formActions, selectField, textareaField } from '../components/forms.js';
 import { pageTitle } from '../app/render-helpers.js';
+
+const CONSULTATION_TOPICS = [
+  { value: '', label: 'Choose a topic' },
+  'IT Consultancy',
+  'Cyber Security',
+  'Artificial Intelligence',
+  'Cloud Computing',
+  'Big Data / Data Engineering',
+  'IT Support Services',
+  'Risk & Management Consulting',
+  'Strategy and Implementation',
+  'Sustainability',
+  'Education Consultancy',
+  'Products / Demonstration',
+  'Partnership',
+  'General Business Enquiry'
+];
 
 export function renderContactPage() {
   pageTitle('Contact');
@@ -45,11 +63,11 @@ export function renderContactPage() {
               ${field('jobTitle','Job Title')}
               ${field('email','Email','email',true)}
               ${field('phone','Phone Number','tel',true,'phone')}
-              <div class="form-field form-field--full"><label for="consultation-topic">Consultation topic *</label><select id="consultation-topic" name="consultationTopic" required><option value="">Choose a topic</option><option>IT Consultancy</option><option>Cyber Security</option><option>Artificial Intelligence</option><option>Cloud Computing</option><option>Big Data / Data Engineering</option><option>IT Support Services</option><option>Risk & Management Consulting</option><option>Strategy and Implementation</option><option>Sustainability</option><option>Education Consultancy</option><option>Products / Demonstration</option><option>Partnership</option><option>General Business Enquiry</option></select><span class="field-error"></span></div>
-              <div class="form-field form-field--full"><label for="message">How can we help? *</label><textarea id="message" name="message" required placeholder="Describe the requirement, target outcome, current environment, known constraints and preferred timeline."></textarea><span class="field-error"></span></div>
-              <div class="form-field form-field--full contact-consent"><label class="consent-row" for="privacy-consent"><input id="privacy-consent" type="checkbox" name="privacyConsent" required><span>I understand that RC IT Services will use the information I provide to respond to this enquiry. See the <a href="/privacy">Privacy Policy</a>.</span></label><span class="field-error"></span></div>
+              ${selectField({ id: 'consultation-topic', name: 'consultationTopic', label: 'Consultation topic', required: true, options: CONSULTATION_TOPICS, full: true })}
+              ${textareaField({ id: 'message', name: 'message', label: 'How can we help?', required: true, placeholder: 'Describe the requirement, target outcome, current environment, known constraints and preferred timeline.' })}
+              ${consentField({ id: 'privacy-consent', name: 'privacyConsent', required: true, className: 'contact-consent', content: 'I understand that RC IT Services will use the information I provide to respond to this enquiry. See the <a href="/privacy">Privacy Policy</a>.' })}
             </div>
-            <div class="form-actions"><button class="btn btn--primary" type="submit">Send Enquiry</button><p class="form-status" data-form-status></p></div>
+            ${formActions({ submitLabel: 'Send Enquiry' })}
           </form>
         </div>
       </div>

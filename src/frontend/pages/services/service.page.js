@@ -1,4 +1,6 @@
-import { pageHero, sectionHeading, ctaPanel, arrow, esc } from '../../app/components.js';
+import { ctaPanel, pageHero, sectionHeading } from '../../components/content.js';
+import { deliveryStep, helpCard, topicCard } from '../../components/cards.js';
+import { arrow, esc } from '../../components/core.js';
 import { pageTitle, imageTag } from '../../app/render-helpers.js';
 
 function editorialImage(page) {
@@ -11,13 +13,13 @@ function editorialImage(page) {
 export function renderServicePage(page, servicePath) {
   pageTitle(page.title);
   const secondary = editorialImage(page);
-  const dimensions = page.dimensions ? `<section class="section section--blue"><div class="container">${sectionHeading('Big Data dimensions', 'The operating characteristics that shape the data architecture', 'Scale alone does not define a data platform. Variability, trust, security, change rate, usability and business value all influence architecture and operating decisions.')}<div class="topic-grid">${page.dimensions.map((d) => `<article class="topic-card"><h3>${esc(d)}</h3><p>Considered explicitly in data design, quality, governance and operating decisions.</p></article>`).join('')}</div></div></section>` : '';
+  const dimensions = page.dimensions ? `<section class="section section--blue"><div class="container">${sectionHeading('Big Data dimensions', 'The operating characteristics that shape the data architecture', 'Scale alone does not define a data platform. Variability, trust, security, change rate, usability and business value all influence architecture and operating decisions.')}<div class="topic-grid">${page.dimensions.map((dimension) => topicCard({ title: dimension })).join('')}</div></div></section>` : '';
   return `<main id="main-content">
     ${pageHero({ ...page, crumbs: [{label:'Home',href:'/'},{label:'Services',href:'/services/it/consultancy-services'},{label:page.title}] })}
-    <section class="section"><div class="container split"><div>${imageTag(secondary.image, secondary.alt)}</div><div><span class="eyebrow">Service overview</span><h2>${esc(page.introTitle)}</h2><p>${esc(page.intro)}</p><ul class="list-check">${page.bullets.map((b) => `<li>${esc(b)}</li>`).join('')}</ul></div></div></section>
+    <section class="section"><div class="container split"><div>${imageTag(secondary.image, secondary.alt)}</div><div><span class="eyebrow">Service overview</span><h2>${esc(page.introTitle)}</h2><p>${esc(page.intro)}</p><ul class="list-check">${page.bullets.map((bullet) => `<li>${esc(bullet)}</li>`).join('')}</ul></div></div></section>
     ${dimensions}
     <section class="section section--soft"><div class="container">${sectionHeading('HOW WE HELP', `How RC approaches ${page.title}`, 'Explore the specialist capabilities within this service area. Each capability has its own page covering context, scope, delivery approach, controls, expected outcomes and the wider service environment around the work.')}
-      <div class="help-grid">${page.howWeHelp.map((item) => `<article class="help-card"><h3>${esc(item.title)}</h3><p class="help-card__summary">${esc(item.summary)}</p><p class="help-card__detail">${esc(item.detail)}</p><a class="btn btn--text" href="${esc(servicePath)}/${esc(item.slug)}">Read More ${arrow()}</a></article>`).join('')}</div>
+      <div class="help-grid">${page.howWeHelp.map((item) => helpCard({ item, servicePath })).join('')}</div>
     </div></section>
     ${ctaPanel(`Talk to us about ${page.title}`, `Share the business objective, current environment, known constraints and target timeline. We will use that context to identify the most relevant capability and delivery path.`)}
   </main>`;
@@ -31,6 +33,13 @@ export function renderServiceDetailPage({ page, item, servicePath }) {
   pageTitle(`${item.title} | ${page.title}`);
   const siblings = page.howWeHelp.filter((candidate) => candidate.slug !== item.slug);
   const secondary = editorialImage(page);
+  const deliverySteps = [
+    ['01','Discover','Clarify the business problem, users, current systems, constraints, risks, data and desired outcome.'],
+    ['02','Design','Define responsibilities, architecture boundaries, controls, interfaces, measures and acceptance criteria.'],
+    ['03','Implement','Deliver the agreed capability in controlled increments with engineering, quality and stakeholder feedback built in.'],
+    ['04','Validate & operate','Verify the outcome, document ownership, monitor behaviour and establish the next improvement cycle.']
+  ];
+
   return `<main id="main-content" class="service-detail-page">
     ${pageHero({
       category:`${page.title} · How We Help`,
@@ -52,12 +61,7 @@ export function renderServiceDetailPage({ page, item, servicePath }) {
     </div></section>
 
     <section class="section"><div class="container">${sectionHeading('Delivery approach', `How we structure ${item.title}`, 'The exact engagement changes by client context, but the work moves through explicit discovery, design, implementation and verification rather than ending with an isolated recommendation.')}
-      <div class="delivery-steps">
-        <article><span>01</span><h3>Discover</h3><p>Clarify the business problem, users, current systems, constraints, risks, data and desired outcome.</p></article>
-        <article><span>02</span><h3>Design</h3><p>Define responsibilities, architecture boundaries, controls, interfaces, measures and acceptance criteria.</p></article>
-        <article><span>03</span><h3>Implement</h3><p>Deliver the agreed capability in controlled increments with engineering, quality and stakeholder feedback built in.</p></article>
-        <article><span>04</span><h3>Validate & operate</h3><p>Verify the outcome, document ownership, monitor behaviour and establish the next improvement cycle.</p></article>
-      </div>
+      <div class="delivery-steps">${deliverySteps.map(([number,title,text]) => deliveryStep({ number, title, text })).join('')}</div>
     </div></section>
 
     <section class="section section--soft"><div class="container detail-outcome">
