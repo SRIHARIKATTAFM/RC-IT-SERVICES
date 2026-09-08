@@ -9,6 +9,8 @@ const required = [
   'src/frontend/app/route-enhancements.js',
   'src/frontend/app/route-styles.js',
   'src/frontend/router/router.js',
+  'src/frontend/seo/seo-config.js',
+  'src/frontend/seo/seo-model.js',
   'src/frontend/styles/app.css',
   'src/frontend/styles/global-overrides.css',
   'src/frontend/styles/route-careers.css',
@@ -62,7 +64,10 @@ const required = [
   'src/frontend/pages/support/not-found.page.js',
   'tests/design-system.mjs',
   'tests/performance-routing.mjs',
+  'tests/seo.mjs',
+  'tests/seo-build.mjs',
   'scripts/check-performance.mjs',
+  'docs/SEO_ARCHITECTURE.md',
   'src/backend/runtime/worker.js',
   'src/backend/admin/README.md',
   'src/backend/api/README.md',
@@ -95,41 +100,28 @@ for (const relative of forbidden) {
 
 const routerSource = await readFile(path.join(root, 'src/frontend/router/router.js'), 'utf8');
 const explicitPageReferences = [
-  'home.page.js',
-  'about.page.js',
-  'contact.page.js',
-  'products.page.js',
-  'white-papers.page.js',
-  'careers.page.js',
-  'careers/job-detail.page.js',
-  'careers/application.page.js',
-  'support/privacy.page.js',
-  'support/cookies.page.js',
-  'support/terms.page.js'
+  'home.page.js', 'about.page.js', 'contact.page.js', 'products.page.js', 'white-papers.page.js',
+  'careers.page.js', 'careers/job-detail.page.js', 'careers/application.page.js',
+  'support/privacy.page.js', 'support/cookies.page.js', 'support/terms.page.js'
 ];
 for (const moduleName of explicitPageReferences) {
-  if (!routerSource.includes(moduleName)) {
-    throw new Error(`Router is not using explicit page module: ${moduleName}`);
-  }
+  if (!routerSource.includes(moduleName)) throw new Error(`Router is not using explicit page module: ${moduleName}`);
 }
 if (!routerSource.includes('import(') || /from ['"]\.\.\/pages\//.test(routerSource)) {
   throw new Error('Phase 5 requires route pages to use dynamic imports rather than static page imports.');
 }
 
 const componentFacade = await readFile(path.join(root, 'src/frontend/app/components.js'), 'utf8');
-if (!componentFacade.includes("export * from '../components/index.js'")) {
-  throw new Error('Legacy component facade must delegate to the Phase 4 shared component index.');
-}
-if (componentFacade.includes('function headerTemplate') || componentFacade.includes('function footerTemplate')) {
-  throw new Error('Header/footer markup must be owned by shared Phase 4 component modules.');
-}
+if (!componentFacade.includes("export * from '../components/index.js'")) throw new Error('Legacy component facade must delegate to the Phase 4 shared component index.');
+if (componentFacade.includes('function headerTemplate') || componentFacade.includes('function footerTemplate')) throw new Error('Header/footer markup must be owned by shared Phase 4 component modules.');
 
 const appSource = await readFile(path.join(root, 'src/frontend/app/app.js'), 'utf8');
-if (!appSource.includes("../layouts/site-shell.js") || !appSource.includes('siteShell(')) {
-  throw new Error('Public app shell must be composed by the shared site layout.');
-}
-if (!appSource.includes('ensureRouteStyles(pathName)') || !appSource.includes('bindRouteEnhancements(pathName)')) {
-  throw new Error('Phase 5 route-specific style/interaction loading is not wired into the app shell.');
+if (!appSource.includes("../layouts/site-shell.js") || !appSource.includes('siteShell(')) throw new Error('Public app shell must be composed by the shared site layout.');
+if (!appSource.includes('ensureRouteStyles(pathName)') || !appSource.includes('bindRouteEnhancements(pathName)')) throw new Error('Phase 5 route-specific style/interaction loading is not wired into the app shell.');
+
+const seoSource = await readFile(path.join(root, 'src/frontend/seo/seo-model.js'), 'utf8');
+for (const contract of ['renderSeoHead', 'renderSitemapXml', 'renderRobotsTxt', 'JobPosting', 'BreadcrumbList', "'Service'", "'Organization'", "'WebSite'", "'WebPage'"]) {
+  if (!seoSource.includes(contract)) throw new Error(`Phase 6 SEO contract is missing: ${contract}`);
 }
 
 const appCss = await readFile(path.join(root, 'src/frontend/styles/app.css'), 'utf8');
@@ -143,8 +135,6 @@ for (const token of ['--space-4', '--container-narrow', '--control-height', '--f
 }
 
 const publicEntries = await readdir(path.join(root, 'public'));
-if (publicEntries.includes('js') || publicEntries.includes('css')) {
-  throw new Error('Frontend source must not live under public/js or public/css after the structured-source migration.');
-}
+if (publicEntries.includes('js') || publicEntries.includes('css')) throw new Error('Frontend source must not live under public/js or public/css after the structured-source migration.');
 
-console.log(`PASS: structured page architecture + shared design system + Phase 5 route/style performance boundaries verified (${required.length} required paths).`);
+console.log(`PASS: structured architecture + shared design system + Phase 5 performance boundaries + Phase 6 SEO ownership verified (${required.length} required paths).`);
