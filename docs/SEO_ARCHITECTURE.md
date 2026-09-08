@@ -11,6 +11,7 @@ Phase 6 converts the public website from a client-rendered SPA shell into a buil
 - public production origin
 - static-page metadata
 - legacy redirect definitions
+- the deployment search-indexing gate
 - the explicit job-search eligibility gate
 
 `src/frontend/seo/seo-model.js` owns:
@@ -28,9 +29,9 @@ Phase 6 converts the public website from a client-rendered SPA shell into a buil
 
 The current canonical origin defaults to the active Cloudflare production hostname. Phase 17 must set `PUBLIC_ORIGIN` to the approved custom production domain when that domain is configured. Canonicals must not point to an unconfigured future domain.
 
-## Indexability policy
+## Production indexability policy
 
-Indexable now:
+Indexable on the primary production build now:
 
 - canonical public marketing pages
 - service pages
@@ -50,6 +51,30 @@ Noindex now:
 Login, job-detail and job-application URLs remain crawlable while carrying `noindex` in the prerendered HTML. They are deliberately **not** disallowed in `robots.txt`; a crawler must be able to fetch a page to observe its `noindex` rule. These routes are excluded from the sitemap while they are not search-eligible. Future private/admin data must be protected by authentication/authorization rather than relying on robots directives as a security boundary.
 
 Compatibility aliases are redirects and never sitemap entries.
+
+## Deployment search-indexing gate
+
+Cloudflare Workers Builds exposes `WORKERS_CI_BRANCH`. Phase 6 uses that build-time branch identity to distinguish the primary `main` deployment from non-main branch previews.
+
+`DEPLOYMENT_SEARCH_INDEXING_ENABLED` is true only when:
+
+- the Workers build branch is `main`; or
+- no Workers branch variable is present, which allows local/GitHub CI to validate the production SEO model deterministically.
+
+For a non-main Cloudflare branch preview:
+
+- the full route set is still prerendered for QA;
+- every route descriptor is `noindex`;
+- every prerendered HTML route contains `noindex,nofollow`;
+- `getIndexableRoutes()` returns zero routes;
+- `sitemap.xml` contains no URL entries;
+- `robots.txt` does not advertise a sitemap;
+- `robots.txt` allows crawling so a crawler can observe the page-level `noindex` directive;
+- canonical URLs continue to reference the approved primary production origin rather than the preview hostname.
+
+This prevents branch-preview URLs from becoming an alternate searchable copy without creating the contradictory `robots.txt` + `noindex` combination.
+
+The Vercel deployment is retained only as a secondary live fallback. Its configuration applies `X-Robots-Tag: noindex, nofollow` globally so it does not compete with Cloudflare as a second indexable origin. Automatic Vercel Git deployment remains disabled; a live Vercel deployment must not be reported as carrying the new header until that configuration is actually deployed and verified.
 
 ## Job-search eligibility gate
 
@@ -83,7 +108,7 @@ Job application forms never receive JobPosting schema. Once the eligibility gate
 
 ## Sitemap policy
 
-The generated sitemap contains only routes whose centralized SEO descriptor is explicitly indexable. Legacy aliases, Login, gated job routes, application forms and unknown routes are excluded.
+The generated production sitemap contains only routes whose centralized SEO descriptor is explicitly indexable. Legacy aliases, Login, gated job routes, application forms and unknown routes are excluded. Non-main Cloudflare preview builds deliberately produce a valid sitemap document with zero URL entries.
 
 ## Redirect and 404 policy
 
