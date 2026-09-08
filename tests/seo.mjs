@@ -6,7 +6,9 @@ const { ALL_ROUTES, COMPANY, LEGACY_ROUTE_ALIASES } = await import('../src/front
 const { SERVICE_PAGES } = await import('../src/frontend/app/pages.js');
 const { getPublishedJobs } = await import('../src/frontend/app/career-job-catalog.js');
 const {
+  JOB_SEARCH_INDEXING_ENABLED,
   SITE_ORIGIN,
+  createJobPostingSchema,
   getIndexableRoutes,
   getPrerenderRoutes,
   getSeoForRoute,
@@ -77,18 +79,24 @@ assert(organization?.address?.addressRegion === addressRegion, 'Organization reg
 assert(organization?.address?.postalCode === postalCode, 'Organization postcode diverged from COMPANY.registeredOffice.');
 assert(organization?.address?.addressCountry === 'GB', 'Organization country must be GB.');
 
+assert(JOB_SEARCH_INDEXING_ENABLED === false, 'Job search indexing must remain disabled until the real application workflow is available.');
+const supportedEmploymentTypes = new Set(['FULL_TIME', 'PART_TIME', 'CONTRACTOR', 'TEMPORARY', 'INTERN', 'VOLUNTEER', 'PER_DIEM', 'OTHER']);
+
 for (const job of publishedJobs) {
   const detailPath = `/careers/jobs/${job.slug}`;
   const applicationPath = `${detailPath}/apply`;
   const jobSeo = getSeoForRoute(detailPath);
   const appSeo = getSeoForRoute(applicationPath);
-  const jobPosting = schemaGraphForRoute(detailPath).find((node) => node['@type'] === 'JobPosting');
+  const graph = schemaGraphForRoute(detailPath);
+  const candidateJobPosting = createJobPostingSchema(jobSeo);
 
-  assert(jobSeo?.index === true, `Published job is not indexable: ${detailPath}`);
+  assert(jobSeo?.index === false, `Job must remain noindex until a real application path is available: ${detailPath}`);
   assert(jobSeo.canonical === `${SITE_ORIGIN}${detailPath}`, `Published job canonical is wrong: ${detailPath}`);
-  assert(jobPosting, `JobPosting schema missing: ${detailPath}`);
-  assert(jobPosting.description.includes('<p>') && jobPosting.description.includes('<ul>'), `JobPosting description must contain structured HTML: ${detailPath}`);
-  assert(jobPosting.description.includes('Responsibilities') && jobPosting.description.includes('Qualifications'), `JobPosting description is incomplete: ${detailPath}`);
+  assert(renderSeoHead(detailPath).includes('noindex,nofollow'), `Job noindex metadata is missing: ${detailPath}`);
+  assert(!graph.some((node) => node['@type'] === 'JobPosting'), `JobPosting must not be emitted before application eligibility: ${detailPath}`);
+
+  assert(candidateJobPosting.description.includes('<p>') && candidateJobPosting.description.includes('<ul>'), `Candidate JobPosting description must contain structured HTML: ${detailPath}`);
+  assert(candidateJobPosting.description.includes('Responsibilities') && candidateJobPosting.description.includes('Qualifications'), `Candidate JobPosting description is incomplete: ${detailPath}`);
 
   for (const [label, value] of [
     ['Department', job.department],
@@ -98,15 +106,16 @@ for (const job of publishedJobs) {
     ['Experience', job.experience]
   ]) {
     if (value) {
-      assert(jobPosting.description.includes(`${label}: ${htmlEsc(value)}`), `JobPosting description is missing visible ${label.toLowerCase()}: ${detailPath}`);
+      assert(candidateJobPosting.description.includes(`${label}: ${htmlEsc(value)}`), `Candidate JobPosting description is missing visible ${label.toLowerCase()}: ${detailPath}`);
     }
   }
   for (const industry of job.industries || []) {
-    assert(jobPosting.description.includes(`<li>${htmlEsc(industry)}</li>`), `JobPosting description is missing visible industry context: ${detailPath}`);
+    assert(candidateJobPosting.description.includes(`<li>${htmlEsc(industry)}</li>`), `Candidate JobPosting description is missing visible industry context: ${detailPath}`);
   }
 
-  assert(jobPosting.datePosted === job.postedDate, `JobPosting datePosted changed: ${detailPath}`);
-  assert(jobPosting.jobLocation?.address?.addressCountry === 'GB', `JobPosting country missing: ${detailPath}`);
+  assert(candidateJobPosting.datePosted === job.postedDate, `Candidate JobPosting datePosted changed: ${detailPath}`);
+  assert(candidateJobPosting.jobLocation?.address?.addressCountry === 'GB', `Candidate JobPosting country missing: ${detailPath}`);
+  assert(supportedEmploymentTypes.has(candidateJobPosting.employmentType), `Unsupported JobPosting employmentType: ${detailPath}`);
 
   assert(appSeo?.index === false, `Job application route must be noindex: ${applicationPath}`);
   assert(appSeo.canonical === `${SITE_ORIGIN}${applicationPath}`, `Job application route should use a self canonical while remaining noindex: ${applicationPath}`);
@@ -125,13 +134,16 @@ for (const alias of LEGACY_ROUTE_ALIASES) {
 }
 assert(!sitemap.includes(`${SITE_ORIGIN}/login`), 'Login leaked into sitemap.');
 assert(!sitemap.includes('/apply</loc>'), 'Application route leaked into sitemap.');
+for (const job of publishedJobs) {
+  assert(!sitemap.includes(`${SITE_ORIGIN}/careers/jobs/${job.slug}</loc>`), `Ineligible job leaked into sitemap: ${job.slug}`);
+}
 
 const robots = renderRobotsTxt();
 for (const rule of ['Disallow: /api/', 'Disallow: /admin/', `Sitemap: ${SITE_ORIGIN}/sitemap.xml`]) {
   assert(robots.includes(rule), `Robots rule missing: ${rule}`);
 }
 assert(!robots.includes('Disallow: /login'), 'Login must stay crawlable so crawlers can observe its noindex directive.');
-assert(!robots.includes('Disallow: /careers/jobs/*/apply'), 'Application pages must stay crawlable so crawlers can observe their noindex directive.');
+assert(!robots.includes('Disallow: /careers/jobs/'), 'Job and application pages must stay crawlable so crawlers can observe their noindex directives.');
 
 const redirects = renderRedirectsFile();
 for (const alias of [...LEGACY_ROUTE_ALIASES, '/index.php']) {
@@ -151,4 +163,4 @@ for (const route of prerenderRoutes) {
   }
 }
 
-console.log(`PASS: Phase 6 SEO model verified for ${prerenderRoutes.length} prerender routes, ${indexableRoutes.length} indexable routes and ${publishedJobs.length} published JobPosting routes.`);
+console.log(`PASS: Phase 6 SEO model verified for ${prerenderRoutes.length} prerender routes, ${indexableRoutes.length} currently eligible indexable routes and ${publishedJobs.length} gated job routes.`);
