@@ -11,16 +11,17 @@ Phase 6 converts the public website from a client-rendered SPA shell into a buil
 - public production origin
 - static-page metadata
 - legacy redirect definitions
+- the explicit job-search eligibility gate
 
 `src/frontend/seo/seo-model.js` owns:
 
 - canonical URL generation
 - service/industry metadata derived from route data
 - service-detail metadata
-- published-job metadata
+- job-route metadata
 - index/noindex policy
 - Open Graph and social metadata
-- Organization, WebSite, WebPage, Service, BreadcrumbList and JobPosting JSON-LD
+- Organization, WebSite, WebPage, Service, BreadcrumbList and eligible JobPosting JSON-LD
 - sitemap route selection and XML rendering
 - robots rules
 - redirect output
@@ -29,38 +30,60 @@ The current canonical origin defaults to the active Cloudflare production hostna
 
 ## Indexability policy
 
-Indexable:
+Indexable now:
 
 - canonical public marketing pages
 - service pages
 - service capability detail pages
 - industry pages
 - Careers landing page
-- published job detail pages
 - legal/public information pages
 
-Noindex:
+Noindex now:
 
 - Login
+- individual job detail routes while application submission is unavailable
 - job application form routes
 - future private/admin routes
 - 404 responses
 
-Login and job-application URLs remain crawlable while carrying `noindex` in the prerendered HTML and response-header policy. They are deliberately **not** disallowed in `robots.txt`; a crawler must be able to fetch a page to observe its `noindex` rule. They are excluded from the sitemap. Future private/admin data must be protected by authentication/authorization rather than relying on robots directives as a security boundary.
+Login, job-detail and job-application URLs remain crawlable while carrying `noindex` in the prerendered HTML. They are deliberately **not** disallowed in `robots.txt`; a crawler must be able to fetch a page to observe its `noindex` rule. These routes are excluded from the sitemap while they are not search-eligible. Future private/admin data must be protected by authentication/authorization rather than relying on robots directives as a security boundary.
 
 Compatibility aliases are redirects and never sitemap entries.
+
+## Job-search eligibility gate
+
+The repository currently contains role profiles marked `published` for the Careers UI, but the real candidate application workflow is intentionally disabled until the approved backend/private storage work is implemented in Phase 12. A visible catalogue status is therefore **not** sufficient evidence that a route is eligible for Google Job Search.
+
+`JOB_SEARCH_INDEXING_ENABLED` remains `false` until both of these conditions are true:
+
+1. the vacancy is confirmed as a genuine, currently open position; and
+2. candidates have a real working way to apply, with submission persisted or visibly failed rather than silently accepted.
+
+While the gate is false:
+
+- job-detail pages remain directly reachable and prerendered;
+- job-detail pages are `noindex,nofollow`;
+- job-detail pages are excluded from `sitemap.xml`;
+- production HTML does **not** emit `JobPosting` structured data;
+- application pages remain `noindex,nofollow`;
+- `robots.txt` does not block either route family.
+
+The pure JobPosting builder remains implemented and tested so Phase 12 can enable the production output only after the application and vacancy-state acceptance criteria are proven. Enabling the flag without those proofs is a policy violation, not a launch shortcut.
 
 ## Structured data policy
 
 Every prerendered route receives Organization, WebSite and WebPage structured data. Service routes additionally receive Service schema. Nested public routes receive BreadcrumbList where applicable.
 
-Published job detail routes receive JobPosting derived only from the approved job catalog. The JobPosting description is generated as structured HTML from the visible job summary, description, responsibilities, qualifications, skills, working style, location and employment terms so it represents the same vacancy users can read on the page. Salary, sponsorship, qualifications or other facts are never invented.
+Organization legal identity and registered-address data are derived from the existing centralized company configuration rather than being duplicated inside the SEO model.
 
-Job application forms do not receive JobPosting schema. JobPosting exists only on the canonical job-description route.
+The candidate JobPosting model is derived only from the approved job catalog. Its description is generated as structured HTML from the visible job summary, department, location, working arrangement, employment type, experience, technologies, industry context, responsibilities, qualifications, working-style detail and employment terms so it represents the same vacancy users can read on the page. Salary, sponsorship, credentials or other facts are never invented.
+
+Job application forms never receive JobPosting schema. Once the eligibility gate is legitimately enabled, JobPosting may exist only on the canonical single-job description route.
 
 ## Sitemap policy
 
-The generated sitemap contains only routes whose centralized SEO descriptor is explicitly indexable. Legacy aliases, Login, application forms and unknown routes are excluded.
+The generated sitemap contains only routes whose centralized SEO descriptor is explicitly indexable. Legacy aliases, Login, gated job routes, application forms and unknown routes are excluded.
 
 ## Redirect and 404 policy
 
@@ -72,4 +95,4 @@ Automated tests render every public route and reject links that point to legacy 
 
 ## Phase boundary
 
-This phase establishes public crawlability and SEO architecture only. Backend persistence, authentication, CMS/database-driven SEO management and the final custom-domain cutover remain later phases.
+This phase establishes public crawlability and SEO architecture only. Backend persistence, authentication, job CMS authority, candidate application persistence, CMS/database-driven SEO management and the final custom-domain cutover remain later phases.
