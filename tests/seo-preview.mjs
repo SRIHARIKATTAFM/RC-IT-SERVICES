@@ -10,6 +10,7 @@ const {
   getPrerenderRoutes,
   getSeoForRoute,
   renderRobotsTxt,
+  renderSeoHead,
   renderSitemapXml
 } = await import('../src/frontend/seo/seo-model.js');
 
@@ -27,11 +28,13 @@ for (const route of prerenderRoutes) {
   const seo = getSeoForRoute(route);
   assert(seo?.index === false, `Preview route unexpectedly remained indexable: ${route}`);
   assert(seo?.canonical.startsWith(`${SITE_ORIGIN}/`), `Preview canonical must continue to reference the production origin: ${route}`);
+  assert(renderSeoHead(route).includes('name="robots" content="noindex,nofollow"'), `Preview route is missing its noindex directive: ${route}`);
 }
 
 const robots = renderRobotsTxt();
-assert(robots === 'User-agent: *\nDisallow: /\n', 'Preview robots.txt must disallow the complete branch-preview deployment.');
+assert(robots === 'User-agent: *\nAllow: /\n', 'Preview robots.txt must allow crawling so crawlers can observe page-level noindex directives.');
 assert(!robots.includes('Sitemap:'), 'Preview robots.txt must not advertise the production sitemap.');
+assert(!robots.includes('Disallow: /'), 'Preview robots.txt must not block crawlers from observing noindex.');
 
 const sitemap = renderSitemapXml();
 assert(!sitemap.includes('<url>'), 'Preview sitemap must not expose indexable URLs.');
