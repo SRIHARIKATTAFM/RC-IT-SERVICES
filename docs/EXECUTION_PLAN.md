@@ -29,7 +29,7 @@ Each phase is reviewed from all of these perspectives:
 - [x] ~~Phase 1 — Full architecture and regression baseline~~ — COMPLETED & VERIFIED
 - [x] ~~Phase 2 — Structured project foundation~~ — COMPLETED & VERIFIED
 - [x] ~~Phase 3 — Frontend page-by-page migration~~ — COMPLETED & VERIFIED
-- [ ] Phase 4 — Shared components and design-system cleanup
+- [x] ~~Phase 4 — Shared components and design-system cleanup~~ — COMPLETED & VERIFIED
 - [ ] Phase 5 — Performance optimization
 - [ ] Phase 6 — SEO architecture
 - [ ] Phase 7 — Backend foundation
@@ -200,6 +200,24 @@ Create reusable, deliberate UI primitives without changing the approved visual l
 - shared component APIs are small and meaningful
 - existing public appearance remains stable
 - accessibility semantics improve or remain correct
+
+### Verification record
+- canonical shared presentation ownership established under `src/frontend/components/`
+- shared public shell established under `src/frontend/layouts/site-shell.js`
+- legacy `src/frontend/app/components.js` reduced to a compatibility re-export facade with architecture checks preventing it from regaining header/footer implementation ownership
+- Home, Products, service-family pages and Contact migrated across representative repeated card/content/form patterns
+- explicit design-system tokens added for spacing, responsive containers, typography, controls, focus treatment and layering while retaining approved visual baseline values
+- active-navigation, breadcrumb, form-error, toast/status and dialog accessibility contracts preserved or improved
+- dialog keyboard-handler lifetime and shared brand accessibility-label escaping were hardened during review
+- dedicated design-system regression tests protect shared CSS hooks, semantics, visual baseline tokens and default responsive-container behaviour
+- verified implementation head `e0123b8d1806eb21e23a30e4a907cea967fdf457` passed GitHub Actions run `34242305192` (run #76): architecture verification, API/server smoke tests, full route-render regression, design-system contract tests, optimized production build and Cloudflare bundle/config verification
+- route regression remained green for 26 canonical routes, 3 compatibility aliases, 40 service-capability detail routes and 92 career detail/application routes
+- live production route verification is intentionally deferred until an approved merge to `main`; the PR workflow correctly skips that production-only job
+- detailed evidence and the all-role review are recorded in `docs/PHASE_4_VERIFICATION.md`
+- Phase 5 work was not started
+
+### Status
+`~~Phase 4 — Shared components and design-system cleanup~~ — COMPLETED & VERIFIED`
 
 ---
 
@@ -631,4 +649,4 @@ Before closing every phase:
 
 # Current status
 
-Phase 1, Phase 2 and Phase 3 are completed and verified. Phase 4 has not been started.
+Phase 1, Phase 2, Phase 3 and Phase 4 are completed and verified. Phase 5 has not been started.
