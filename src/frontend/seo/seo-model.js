@@ -1,7 +1,13 @@
 import { ALL_ROUTES, COMPANY, IMAGES } from '../app/site-config.js';
 import { INDUSTRY_PAGES, SERVICE_PAGES, findServiceDetail } from '../app/pages.js';
 import { getPublishedJob, getPublishedJobs } from '../app/career-job-catalog.js';
-import { LEGACY_REDIRECTS, SITE_NAME, SITE_ORIGIN, STATIC_PAGE_SEO } from './seo-config.js';
+import {
+  JOB_SEARCH_INDEXING_ENABLED,
+  LEGACY_REDIRECTS,
+  SITE_NAME,
+  SITE_ORIGIN,
+  STATIC_PAGE_SEO
+} from './seo-config.js';
 
 function esc(value = '') {
   return String(value)
@@ -104,7 +110,7 @@ function employmentType(value = '') {
   if (normalized.includes('contract')) return 'CONTRACTOR';
   if (normalized.includes('temporary')) return 'TEMPORARY';
   if (normalized.includes('intern')) return 'INTERN';
-  return String(value || 'OTHER').toUpperCase().replace(/[^A-Z]+/g, '_');
+  return 'OTHER';
 }
 
 function htmlListSection(label, items = []) {
@@ -140,7 +146,7 @@ function jobDescriptor(path, job) {
     title: `${job.title} | Careers | RC IT Services`,
     description: job.summary,
     image: IMAGES.careersJob || IMAGES.careers,
-    index: true
+    index: JOB_SEARCH_INDEXING_ENABLED
   }, { kind: 'job', job });
 }
 
@@ -274,7 +280,7 @@ function serviceSchema(seo) {
   };
 }
 
-function jobPostingSchema(seo) {
+export function createJobPostingSchema(seo) {
   const job = seo.job;
   const locality = /london/i.test(job.location || '') ? 'London' : undefined;
   const posting = {
@@ -327,7 +333,7 @@ export function schemaGraphForRoute(pathName) {
   const breadcrumb = breadcrumbSchema(seo.path);
   if (breadcrumb) graph.push(breadcrumb);
   if (seo.service) graph.push(serviceSchema(seo));
-  if (seo.kind === 'job') graph.push(jobPostingSchema(seo));
+  if (seo.kind === 'job' && seo.index) graph.push(createJobPostingSchema(seo));
   return graph;
 }
 
@@ -386,4 +392,4 @@ export function renderRedirectsFile() {
   return `${LEGACY_REDIRECTS.map(({ source, destination, status }) => `${source} ${destination} ${status}`).join('\n')}\n`;
 }
 
-export { LEGACY_REDIRECTS, SITE_NAME, SITE_ORIGIN };
+export { JOB_SEARCH_INDEXING_ENABLED, LEGACY_REDIRECTS, SITE_NAME, SITE_ORIGIN };
