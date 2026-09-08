@@ -35,18 +35,25 @@ jobs:
       - name: Verify source architecture
         run: npm run check:architecture
 
-      - name: Run smoke tests
+      - name: Run smoke and regression tests
         run: npm test
 
-      - name: Build optimized production assets
+      - name: Build optimized prerendered production assets
         run: npm run build
 
       - name: Enforce production performance budgets
         run: npm run test:performance
 
+      - name: Verify prerendered SEO production output
+        run: npm run test:seo-build
+
       - name: Verify production bundle and Cloudflare configuration
         run: |
           test -f dist/index.html
+          test -f dist/404.html
+          test -f dist/sitemap.xml
+          test -f dist/robots.txt
+          test -f dist/_redirects
           test -d dist/assets
           test -f wrangler.jsonc
           test -f worker/index.js
@@ -55,10 +62,12 @@ jobs:
           test -f src/backend/runtime/worker.js
           grep -q 'site-root' dist/index.html
           grep -q 'data-route-styles' dist/index.html
-          grep -q 'single-page-application' wrangler.jsonc
+          grep -q 'data-prerendered-path' dist/index.html
+          grep -q '404-page' wrangler.jsonc
+          grep -q 'drop-trailing-slash' wrangler.jsonc
           grep -q 'rcitcservices' wrangler.jsonc
           grep -q 'serveApplication' worker/index.js
-          grep -q "src.*frontend" scripts/build.mjs
+          grep -q 'getPrerenderRoutes' scripts/build.mjs
 
   production-route-smoke:
     name: Verify live production routes
@@ -68,7 +77,7 @@ jobs:
     timeout-minutes: 8
 
     steps:
-      - name: Wait for current Cloudflare Workers build and verify deep routes
+      - name: Wait for current Cloudflare prerender build and verify deep routes
         shell: bash
         run: |
           set -euo pipefail
@@ -79,14 +88,15 @@ jobs:
             '/contact'
             '/services/it/cyber-security'
             '/services/it/consultancy-services/agile'
+            '/careers/jobs/senior-data-engineer'
             '/privacy'
           )
 
           for attempt in $(seq 1 30); do
             all_ok=1
             for route in "${routes[@]}"; do
-              code=$(curl -L -sS -o /tmp/rc-page.html -w '%{http_code}' "${BASE}${route}" || true)
-              if [[ "$code" != '200' ]] || ! grep -q 'site-root' /tmp/rc-page.html; then
+              code=$(curl -sS -o /tmp/rc-page.html -w '%{http_code}' "${BASE}${route}" || true)
+              if [[ "$code" != '200' ]] || ! grep -q 'id="main-content"' /tmp/rc-page.html || ! grep -q 'data-prerendered-path=' /tmp/rc-page.html; then
                 all_ok=0
                 break
               fi
@@ -97,22 +107,65 @@ jobs:
               all_ok=0
             fi
 
-            root_code=$(curl -L -sS -o /tmp/rc-deployment.html -w '%{http_code}' "${BASE}/" || true)
-            if [[ "$root_code" != '200' ]] || ! grep -q 'data-route-styles=' /tmp/rc-deployment.html || ! grep -q 'global-overrides-' /tmp/rc-deployment.html; then
+            root_code=$(curl -sS -o /tmp/rc-deployment.html -w '%{http_code}' "${BASE}/" || true)
+            if [[ "$root_code" != '200' ]] || ! grep -q 'data-prerendered-path="/"' /tmp/rc-deployment.html || ! grep -q 'global-overrides-' /tmp/rc-deployment.html || ! grep -q 'application/ld+json' /tmp/rc-deployment.html; then
               all_ok=0
             fi
 
             if [[ "$all_ok" == '1' ]]; then
-              echo "Current Phase 5 Cloudflare production build verified on attempt ${attempt}."
+              echo "Current Phase 6 Cloudflare prerender build verified on attempt ${attempt}."
               break
             fi
 
             if [[ "$attempt" == '30' ]]; then
-              echo 'Current Cloudflare production build did not become healthy within the verification window.' >&2
+              echo 'Current Cloudflare Phase 6 prerender build did not become healthy within the verification window.' >&2
               exit 1
             fi
             sleep 5
           done
+
+      - name: Verify production SEO, redirects and 404 behaviour
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://rcitcservices.frsmkgit.workers.dev'
+
+          curl -sS "${BASE}/about-us" -o /tmp/about.html
+          grep -q "rel=\"canonical\" href=\"${BASE}/about-us\"" /tmp/about.html
+          grep -q 'property="og:title"' /tmp/about.html
+          grep -q 'application/ld+json' /tmp/about.html
+
+          curl -sS "${BASE}/services/it/cyber-security" -o /tmp/service.html
+          grep -q '"@type":"Service"' /tmp/service.html
+          grep -q 'BreadcrumbList' /tmp/service.html
+
+          curl -sS "${BASE}/careers/jobs/senior-data-engineer" -o /tmp/job.html
+          grep -q 'JobPosting' /tmp/job.html
+          grep -q "rel=\"canonical\" href=\"${BASE}/careers/jobs/senior-data-engineer\"" /tmp/job.html
+
+          curl -sS "${BASE}/login" -o /tmp/login.html
+          grep -q 'name="robots" content="noindex,nofollow"' /tmp/login.html
+
+          curl -sS "${BASE}/sitemap.xml" -o /tmp/sitemap.xml
+          grep -q '<urlset' /tmp/sitemap.xml
+          grep -q "${BASE}/services/it/cyber-security" /tmp/sitemap.xml
+          ! grep -q "${BASE}/login" /tmp/sitemap.xml
+          ! grep -q '/apply</loc>' /tmp/sitemap.xml
+
+          curl -sS "${BASE}/robots.txt" -o /tmp/robots.txt
+          grep -q 'Disallow: /login' /tmp/robots.txt
+          grep -q "Sitemap: ${BASE}/sitemap.xml" /tmp/robots.txt
+
+          unknown_code=$(curl -sS -o /tmp/not-found.html -w '%{http_code}' "${BASE}/definitely-not-a-real-rc-route")
+          test "$unknown_code" = '404'
+          grep -q 'noindex,nofollow' /tmp/not-found.html
+          grep -q 'Page not found' /tmp/not-found.html
+
+          alias_code=$(curl -sS -o /dev/null -w '%{http_code}' "${BASE}/careers/job-opportunities")
+          [[ "$alias_code" == '301' || "$alias_code" == '308' ]]
+          curl -sSI "${BASE}/careers/job-opportunities" | tr -d '\r' | grep -qi '^location:.*\/careers'
+
+          echo 'Production metadata, schema, sitemap, robots, redirects and real 404 behaviour verified.'
 
       - name: Verify production cache policy and split assets
         shell: bash
@@ -120,41 +173,26 @@ jobs:
           set -euo pipefail
           BASE='https://rcitcservices.frsmkgit.workers.dev'
 
-          curl -L -sS "${BASE}/" -o /tmp/rc-index.html
+          curl -sS "${BASE}/" -o /tmp/rc-index.html
           app_asset=$(grep -oE '/assets/app-[A-Za-z0-9]+\.js' /tmp/rc-index.html | head -n1)
           if [[ -z "$app_asset" ]]; then
             echo 'Hashed application JavaScript was not found in production HTML.' >&2
             exit 1
           fi
-          curl -sSI "${BASE}${app_asset}" | tr -d '\r' | grep -qi 'cache-control:.*max-age=31536000.*immutable' || {
-            echo 'Application JavaScript is missing immutable cache headers.' >&2
-            exit 1
-          }
+          curl -sSI "${BASE}${app_asset}" | tr -d '\r' | grep -qi 'cache-control:.*max-age=31536000.*immutable'
 
           route_assets=$(grep -oE 'route-(careers|services|legal)-[A-Za-z0-9]+\.css' /tmp/rc-index.html | sort -u)
           route_count=$(printf '%s\n' "$route_assets" | sed '/^$/d' | wc -l | tr -d ' ')
-          if [[ "$route_count" != '3' ]]; then
-            echo "Expected 3 production route stylesheets; found ${route_count}." >&2
-            exit 1
-          fi
+          test "$route_count" = '3'
           while IFS= read -r asset; do
             [[ -n "$asset" ]] || continue
             code=$(curl -sS -o /dev/null -w '%{http_code}' "${BASE}/assets/${asset}")
-            if [[ "$code" != '200' ]]; then
-              echo "Production route stylesheet ${asset} returned ${code}." >&2
-              exit 1
-            fi
-            curl -sSI "${BASE}/assets/${asset}" | tr -d '\r' | grep -qi 'cache-control:.*max-age=31536000.*immutable' || {
-              echo "Production route stylesheet ${asset} is missing immutable cache headers." >&2
-              exit 1
-            }
+            test "$code" = '200'
+            curl -sSI "${BASE}/assets/${asset}" | tr -d '\r' | grep -qi 'cache-control:.*max-age=31536000.*immutable'
           done <<< "$route_assets"
 
-          curl -sSI "${BASE}/index.html" | tr -d '\r' | grep -qi 'cache-control:.*max-age=0.*must-revalidate' || {
-            echo 'Production index HTML is missing the required revalidation cache policy.' >&2
-            exit 1
-          }
-          echo 'Cloudflare HTML revalidation and immutable split-asset caching verified.'
+          curl -sSI "${BASE}/about-us" | tr -d '\r' | grep -qi 'cache-control:.*max-age=0.*must-revalidate'
+          echo 'Cloudflare prerendered HTML revalidation and immutable split-asset caching verified.'
 
       - name: Verify Vercel fallback routes remain reachable
         shell: bash

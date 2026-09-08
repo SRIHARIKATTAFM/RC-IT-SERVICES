@@ -10,3 +10,12 @@
 
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+/login
+  X-Robots-Tag: noindex, nofollow
+
+/careers/jobs/*/apply
+  X-Robots-Tag: noindex, nofollow
+
+/404.html
+  X-Robots-Tag: noindex, nofollow
