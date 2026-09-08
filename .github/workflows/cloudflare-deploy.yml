@@ -109,15 +109,28 @@ jobs:
             sleep 5
           done
 
-      - name: Verify production cache policy
+      - name: Verify production cache policy and split assets
         shell: bash
         run: |
           set -euo pipefail
           BASE='https://rcitcservices.frsmkgit.workers.dev'
+
           curl -L -sS "${BASE}/" -o /tmp/rc-index.html
-          asset=$(grep -oE '/assets/app-[A-Za-z0-9]+\.js' /tmp/rc-index.html | head -n1)
-          test -n "$asset"
-          curl -sSI "${BASE}${asset}" | tr -d '\r' | grep -qi 'cache-control:.*max-age=31536000.*immutable'
+          app_asset=$(grep -oE '/assets/app-[A-Za-z0-9]+\.js' /tmp/rc-index.html | head -n1)
+          test -n "$app_asset"
+          curl -sSI "${BASE}${app_asset}" | tr -d '\r' | grep -qi 'cache-control:.*max-age=31536000.*immutable'
+
+          route_assets=$(grep -oE 'route-(careers|services|legal)-[A-Za-z0-9]+\.css' /tmp/rc-index.html | sort -u)
+          test "$(printf '%s\n' "$route_assets" | sed '/^$/d' | wc -l)" -eq 3
+          while IFS= read -r asset; do
+            test -n "$asset"
+            code=$(curl -sS -o /dev/null -w '%{http_code}' "${BASE}/assets/${asset}")
+            test "$code" = '200'
+            curl -sSI "${BASE}/assets/${asset}" | tr -d '\r' | grep -qi 'cache-control:.*max-age=31536000.*immutable'
+          done <<< "$route_assets"
+
+          curl -sSI "${BASE}/index.html" | tr -d '\r' | grep -qi 'cache-control:.*max-age=0.*must-revalidate'
+          echo 'Cloudflare HTML revalidation and immutable split-asset caching verified.'
 
       - name: Verify Vercel fallback routes remain reachable
         shell: bash
