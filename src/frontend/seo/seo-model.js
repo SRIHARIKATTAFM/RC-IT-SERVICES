@@ -2,6 +2,7 @@ import { ALL_ROUTES, COMPANY, IMAGES } from '../app/site-config.js';
 import { INDUSTRY_PAGES, SERVICE_PAGES, findServiceDetail } from '../app/pages.js';
 import { getPublishedJob, getPublishedJobs } from '../app/career-job-catalog.js';
 import {
+  DEPLOYMENT_SEARCH_INDEXING_ENABLED,
   JOB_SEARCH_INDEXING_ENABLED,
   LEGACY_REDIRECTS,
   SITE_NAME,
@@ -49,7 +50,7 @@ function descriptor(path, source, extras = {}) {
     description: text(source.description),
     label: source.label || text(source.title).split('|')[0].trim(),
     image: source.image || IMAGES.hero,
-    index: source.index !== false,
+    index: source.index !== false && DEPLOYMENT_SEARCH_INDEXING_ENABLED,
     canonical: canonicalUrl(path),
     kind: extras.kind || 'page',
     ...extras
@@ -378,6 +379,9 @@ export function renderSitemapXml() {
 }
 
 export function renderRobotsTxt() {
+  if (!DEPLOYMENT_SEARCH_INDEXING_ENABLED) {
+    return ['User-agent: *', 'Disallow: /', ''].join('\n');
+  }
   return [
     'User-agent: *',
     'Allow: /',
@@ -392,4 +396,10 @@ export function renderRedirectsFile() {
   return `${LEGACY_REDIRECTS.map(({ source, destination, status }) => `${source} ${destination} ${status}`).join('\n')}\n`;
 }
 
-export { JOB_SEARCH_INDEXING_ENABLED, LEGACY_REDIRECTS, SITE_NAME, SITE_ORIGIN };
+export {
+  DEPLOYMENT_SEARCH_INDEXING_ENABLED,
+  JOB_SEARCH_INDEXING_ENABLED,
+  LEGACY_REDIRECTS,
+  SITE_NAME,
+  SITE_ORIGIN
+};
