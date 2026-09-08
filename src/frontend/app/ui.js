@@ -1,11 +1,13 @@
-import { dialogTemplate } from './components.js';
+import { dialogTemplate, toastClass } from '../components/feedback.js';
 
 let lastFocused = null;
 
 export function showToast(message, error = false) {
   const root = document.getElementById('toast-root');
+  if (!root) return;
   const toast = document.createElement('div');
-  toast.className = `toast${error ? ' is-error' : ''}`;
+  toast.className = toastClass(error);
+  toast.setAttribute('role', error ? 'alert' : 'status');
   toast.textContent = message;
   root.appendChild(toast);
   setTimeout(() => toast.remove(), 5000);
@@ -13,6 +15,7 @@ export function showToast(message, error = false) {
 
 export function closeDialog() {
   const root = document.getElementById('dialog-root');
+  if (!root) return;
   root.innerHTML = '';
   document.body.classList.remove('dialog-open');
   lastFocused?.focus?.();
@@ -22,6 +25,7 @@ export function closeDialog() {
 export function openDialog(id, title, body) {
   lastFocused = document.activeElement;
   const root = document.getElementById('dialog-root');
+  if (!root) return;
   root.innerHTML = dialogTemplate({ id, title, body });
   document.body.classList.add('dialog-open');
   const backdrop = root.querySelector('[data-dialog-backdrop]');
@@ -39,7 +43,7 @@ export function openDialog(id, title, body) {
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     }
-  });
+  }, { once: true });
 }
 
 export function bindDialogTriggers() {

@@ -1,5 +1,5 @@
-import { headerTemplate, footerTemplate } from './components.js';
 import { routeContent } from '../router/router.js';
+import { siteShell } from '../layouts/site-shell.js';
 import { bindDesktopNav, bindMobileNav } from './interactions-nav.js';
 import { bindContactOptions, bindLogin } from './interactions-page.js';
 import { bindCareerRoleBrowser } from './interactions-careers.js';
@@ -15,7 +15,7 @@ function normalisePath(path = '/') {
 
 const root = document.getElementById('site-root');
 const pathName = normalisePath(location.pathname);
-root.innerHTML = `${headerTemplate(pathName)}${routeContent(pathName)}${footerTemplate()}`;
+root.innerHTML = siteShell(pathName, routeContent(pathName));
 
 applyServicePageEnhancements(pathName);
 bindDesktopNav();

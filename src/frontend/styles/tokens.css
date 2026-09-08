@@ -23,22 +23,62 @@
   --color-success: #087f5b;
   --color-danger: #b42318;
   --color-warning: #a15c00;
+
   --shadow-sm: 0 1px 2px rgba(11, 23, 32, .05);
   --shadow-md: 0 12px 34px rgba(11, 23, 32, .08);
   --shadow-lg: 0 24px 64px rgba(11, 23, 32, .12);
+
   --radius-sm: .3rem;
   --radius-md: .5rem;
   --radius-lg: .72rem;
   --radius-xl: 1.1rem;
+  --radius-control: .35rem;
+  --radius-card: .55rem;
+
+  --space-1: .25rem;
+  --space-2: .5rem;
+  --space-3: .75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
   --container: 1240px;
+  --container-narrow: 900px;
+  --container-wide: 1440px;
   --gutter: clamp(1rem, 2.5vw, 2rem);
   --section-y: clamp(4rem, 8vw, 7.25rem);
+
   --font-sans: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-weight-medium: 600;
+  --font-weight-semibold: 700;
+  --font-weight-bold: 800;
   --display-1: clamp(2.85rem, 6vw, 5.7rem);
   --display-2: clamp(2.25rem, 4.5vw, 4.25rem);
   --h2: clamp(2rem, 3.6vw, 3.35rem);
   --h3: clamp(1.3rem, 2vw, 1.75rem);
   --body-lg: clamp(1.05rem, 1.5vw, 1.25rem);
+  --body-base: 1rem;
+  --text-sm: .875rem;
+  --text-xs: .78rem;
+  --line-height-body: 1.6;
+
+  --control-height: 48px;
+  --control-height-small: 42px;
+  --field-height: 50px;
+  --focus-outline: 3px solid color-mix(in srgb, var(--color-primary-600) 65%, white);
+  --focus-shadow: 0 0 0 4px var(--color-primary-100);
+
+  --z-header: 1000;
+  --z-menu: 1100;
+  --z-mobile-nav: 1200;
+  --z-dialog: 1600;
+  --z-toast: 1900;
+  --z-skip-link: 2000;
+
   --transition-fast: 150ms cubic-bezier(.2,.7,.2,1);
   --transition: 280ms cubic-bezier(.2,.7,.2,1);
 }
