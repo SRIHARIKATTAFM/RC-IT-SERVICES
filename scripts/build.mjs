@@ -13,6 +13,7 @@ const jsEntry = path.join(frontendRoot, 'app', 'app.js');
 
 const cssEntries = {
   app: path.join(stylesRoot, 'app.css'),
+  'global-overrides': path.join(stylesRoot, 'global-overrides.css'),
   'route-careers': path.join(stylesRoot, 'route-careers.css'),
   'route-services': path.join(stylesRoot, 'route-services.css'),
   'route-legal': path.join(stylesRoot, 'route-legal.css')
@@ -62,6 +63,7 @@ function outputByPrefix(meta, prefix, extension) {
 
 const jsFile = outputByPrefix(jsBuild.metafile, 'app', '.js');
 const cssFile = outputByPrefix(cssBuild.metafile, 'app', '.css');
+const overridesFile = outputByPrefix(cssBuild.metafile, 'global-overrides', '.css');
 const routeStyles = {
   careers: outputByPrefix(cssBuild.metafile, 'route-careers', '.css'),
   services: outputByPrefix(cssBuild.metafile, 'route-services', '.css'),
@@ -72,9 +74,9 @@ const htmlPath = path.join(out, 'index.html');
 let html = await readFile(htmlPath, 'utf8');
 html = html
   .replace(/\s*<link rel="stylesheet" href="\/(?:css\/[^\"]+|vendor\/bootstrap-grid\.css)" \/>/g, '')
-  .replace('</head>', `  <link rel="stylesheet" href="/assets/${cssFile}" />\n</head>`)
+  .replace('</head>', `  <link rel="stylesheet" href="/assets/${cssFile}" />\n  <link rel="stylesheet" href="/assets/${overridesFile}" data-global-overrides />\n</head>`)
   .replace('<div id="site-root"></div>', `<div id="site-root" data-route-styles='${JSON.stringify(routeStyles)}'></div>`)
   .replace('<script type="module" src="/js/app.js"></script>', `<script type="module" src="/assets/${jsFile}"></script>`);
 await writeFile(htmlPath, html);
 
-console.log(`Built performance-split static site: ${cssFile}, ${jsFile}; route CSS ${Object.values(routeStyles).join(', ')}`);
+console.log(`Built performance-split static site: ${cssFile}, ${overridesFile}, ${jsFile}; route CSS ${Object.values(routeStyles).join(', ')}`);

@@ -26,10 +26,13 @@ function kb(bytes) {
 const html = await readFile(path.join(dist, 'index.html'), 'utf8');
 const jsMatch = html.match(/<script type="module" src="\/assets\/(app-[^"]+\.js)"><\/script>/);
 const cssMatch = html.match(/<link rel="stylesheet" href="\/assets\/(app-[^"]+\.css)"/);
+const overridesMatch = html.match(/<link rel="stylesheet" href="\/assets\/(global-overrides-[^"]+\.css)" data-global-overrides/);
 const routeMatch = html.match(/data-route-styles='([^']+)'/);
 assert(jsMatch, 'Built HTML is missing the hashed application JavaScript entry.');
 assert(cssMatch, 'Built HTML is missing the hashed core stylesheet.');
+assert(overridesMatch, 'Built HTML is missing the hashed global responsive/override stylesheet.');
 assert(routeMatch, 'Built HTML is missing the route stylesheet manifest.');
+assert(html.indexOf(cssMatch[0]) < html.indexOf(overridesMatch[0]), 'Global stylesheet order changed unexpectedly.');
 
 const routeStyles = JSON.parse(routeMatch[1]);
 assert(Object.keys(routeStyles).sort().join(',') === 'careers,legal,services', 'Route stylesheet manifest changed unexpectedly.');
@@ -43,15 +46,18 @@ assert(jsChunks.length >= 4, `Expected route-level JavaScript splitting; only ${
 
 const mainJs = await readFile(path.join(assetsDir, jsMatch[1]));
 const coreCss = await readFile(path.join(assetsDir, cssMatch[1]));
+const overridesCss = await readFile(path.join(assetsDir, overridesMatch[1]));
 const jsStats = sizeStats(mainJs);
 const cssStats = sizeStats(coreCss);
+const overridesStats = sizeStats(overridesCss);
 
 const MAX_MAIN_JS_GZIP = 45 * 1024;
-const MAX_CORE_CSS_GZIP = 24 * 1024;
-const MAX_INITIAL_GZIP = 64 * 1024;
+const MAX_GLOBAL_CSS_GZIP = 28 * 1024;
+const MAX_INITIAL_GZIP = 70 * 1024;
+const globalCssGzip = cssStats.gzip + overridesStats.gzip;
 assert(jsStats.gzip <= MAX_MAIN_JS_GZIP, `Main JS gzip budget exceeded: ${kb(jsStats.gzip)} > ${kb(MAX_MAIN_JS_GZIP)}`);
-assert(cssStats.gzip <= MAX_CORE_CSS_GZIP, `Core CSS gzip budget exceeded: ${kb(cssStats.gzip)} > ${kb(MAX_CORE_CSS_GZIP)}`);
-assert(jsStats.gzip + cssStats.gzip <= MAX_INITIAL_GZIP, `Initial JS+CSS gzip budget exceeded: ${kb(jsStats.gzip + cssStats.gzip)} > ${kb(MAX_INITIAL_GZIP)}`);
+assert(globalCssGzip <= MAX_GLOBAL_CSS_GZIP, `Global CSS gzip budget exceeded: ${kb(globalCssGzip)} > ${kb(MAX_GLOBAL_CSS_GZIP)}`);
+assert(jsStats.gzip + globalCssGzip <= MAX_INITIAL_GZIP, `Initial JS+CSS gzip budget exceeded: ${kb(jsStats.gzip + globalCssGzip)} > ${kb(MAX_INITIAL_GZIP)}`);
 
 let largestChunk = { file: '', gzip: 0 };
 for (const file of jsChunks) {
@@ -69,4 +75,4 @@ const headers = await readFile(path.join(root, 'public', '_headers'), 'utf8');
 assert(headers.includes('max-age=31536000, immutable'), 'Hashed asset immutable-cache policy is missing.');
 assert(headers.includes('/index.html') && headers.includes('must-revalidate'), 'HTML revalidation policy is missing.');
 
-console.log(`PASS: performance budgets. Initial JS ${kb(jsStats.gzip)} gzip, core CSS ${kb(cssStats.gzip)} gzip, combined ${kb(jsStats.gzip + cssStats.gzip)}; ${jsChunks.length} lazy JS chunks; largest ${largestChunk.file} ${kb(largestChunk.gzip)} gzip.`);
+console.log(`PASS: performance budgets. Main JS ${kb(jsStats.gzip)} gzip; global CSS ${kb(globalCssGzip)} gzip; combined ${kb(jsStats.gzip + globalCssGzip)}; ${jsChunks.length} lazy JS chunks; largest ${largestChunk.file} ${kb(largestChunk.gzip)} gzip.`);

@@ -32,6 +32,13 @@ const appCss = await readFile(new URL('../src/frontend/styles/app.css', import.m
 for (const routeCss of ['service-detail.css', 'careers.css', 'career-switch.css', 'career-filters.css', 'legal.css']) {
   assert(!appCss.includes(routeCss), `Route-only stylesheet is still bundled globally: ${routeCss}`);
 }
+const globalOverrides = await readFile(new URL('../src/frontend/styles/global-overrides.css', import.meta.url), 'utf8');
+for (const finalCss of ['responsive.css', 'audit-fixes.css', 'bootstrap-overrides.css']) {
+  assert(globalOverrides.includes(finalCss), `Global final-cascade stylesheet is missing: ${finalCss}`);
+}
+
+const routeStyleSource = await readFile(new URL('../src/frontend/app/route-styles.js', import.meta.url), 'utf8');
+assert(routeStyleSource.includes("insertBefore(link, globalOverrides)"), 'Route CSS is not inserted before the final responsive/override layer.');
 
 const responsiveCss = await readFile(new URL('../src/frontend/styles/responsive.css', import.meta.url), 'utf8');
 for (const breakpoint of ['max-width: 1100px', 'max-width: 900px', 'max-width: 640px', 'max-width: 390px']) {
@@ -43,4 +50,4 @@ assert(imageUtils.includes('[320, 480, 720, 960, 1280, 1600]'), 'Responsive imag
 assert(imageUtils.includes("loading = 'lazy'"), 'Images no longer default to lazy loading.');
 assert(imageUtils.includes('decoding="async"'), 'Async image decoding contract is missing.');
 
-console.log('PASS: route JS splitting, route CSS splitting, lazy interaction loading, responsive breakpoints and responsive-image performance contracts verified.');
+console.log('PASS: route JS splitting, cascade-safe route CSS splitting, lazy interaction loading, desktop/tablet/mobile breakpoints and responsive-image performance contracts verified.');

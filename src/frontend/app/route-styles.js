@@ -1,9 +1,3 @@
-const DEVELOPMENT_STYLES = {
-  careers: '/css/route-careers.css',
-  services: '/css/route-services.css',
-  legal: '/css/route-legal.css'
-};
-
 export function routeStyleKeys(pathName) {
   if (pathName.startsWith('/careers')) return ['careers'];
   if (pathName.startsWith('/services/')) return ['services'];
@@ -23,7 +17,7 @@ function productionManifest() {
 }
 
 function hrefFor(key, manifest) {
-  const value = manifest[key] || DEVELOPMENT_STYLES[key];
+  const value = manifest[key];
   if (!value) return '';
   return value.startsWith('/') ? value : `/assets/${value}`;
 }
@@ -43,12 +37,16 @@ function loadStylesheet(href) {
       console.warn(`Route stylesheet failed to load: ${href}`);
       resolve();
     }, { once: true });
-    document.head.appendChild(link);
+
+    const globalOverrides = document.querySelector('link[data-global-overrides]');
+    if (globalOverrides?.parentNode) globalOverrides.parentNode.insertBefore(link, globalOverrides);
+    else document.head.appendChild(link);
   });
 }
 
 export async function ensureRouteStyles(pathName) {
   if (typeof document === 'undefined') return;
   const manifest = productionManifest();
+  if (!Object.keys(manifest).length) return;
   await Promise.all(routeStyleKeys(pathName).map((key) => loadStylesheet(hrefFor(key, manifest))));
 }

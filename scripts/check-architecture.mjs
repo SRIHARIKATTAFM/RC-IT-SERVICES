@@ -6,8 +6,14 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const required = [
   'src/frontend/app/app.js',
+  'src/frontend/app/route-enhancements.js',
+  'src/frontend/app/route-styles.js',
   'src/frontend/router/router.js',
   'src/frontend/styles/app.css',
+  'src/frontend/styles/global-overrides.css',
+  'src/frontend/styles/route-careers.css',
+  'src/frontend/styles/route-services.css',
+  'src/frontend/styles/route-legal.css',
   'src/frontend/styles/tokens.css',
   'src/frontend/components/index.js',
   'src/frontend/components/core.js',
@@ -55,6 +61,8 @@ const required = [
   'src/frontend/pages/support/terms.page.js',
   'src/frontend/pages/support/not-found.page.js',
   'tests/design-system.mjs',
+  'tests/performance-routing.mjs',
+  'scripts/check-performance.mjs',
   'src/backend/runtime/worker.js',
   'src/backend/admin/README.md',
   'src/backend/api/README.md',
@@ -86,7 +94,7 @@ for (const relative of forbidden) {
 }
 
 const routerSource = await readFile(path.join(root, 'src/frontend/router/router.js'), 'utf8');
-const explicitPageImports = [
+const explicitPageReferences = [
   'home.page.js',
   'about.page.js',
   'contact.page.js',
@@ -99,10 +107,13 @@ const explicitPageImports = [
   'support/cookies.page.js',
   'support/terms.page.js'
 ];
-for (const moduleName of explicitPageImports) {
+for (const moduleName of explicitPageReferences) {
   if (!routerSource.includes(moduleName)) {
     throw new Error(`Router is not using explicit page module: ${moduleName}`);
   }
+}
+if (!routerSource.includes('import(') || /from ['"]\.\.\/pages\//.test(routerSource)) {
+  throw new Error('Phase 5 requires route pages to use dynamic imports rather than static page imports.');
 }
 
 const componentFacade = await readFile(path.join(root, 'src/frontend/app/components.js'), 'utf8');
@@ -117,6 +128,14 @@ const appSource = await readFile(path.join(root, 'src/frontend/app/app.js'), 'ut
 if (!appSource.includes("../layouts/site-shell.js") || !appSource.includes('siteShell(')) {
   throw new Error('Public app shell must be composed by the shared site layout.');
 }
+if (!appSource.includes('ensureRouteStyles(pathName)') || !appSource.includes('bindRouteEnhancements(pathName)')) {
+  throw new Error('Phase 5 route-specific style/interaction loading is not wired into the app shell.');
+}
+
+const appCss = await readFile(path.join(root, 'src/frontend/styles/app.css'), 'utf8');
+for (const routeOnly of ['service-detail.css', 'careers.css', 'career-switch.css', 'career-filters.css', 'legal.css']) {
+  if (appCss.includes(routeOnly)) throw new Error(`Route-only CSS returned to the global bundle: ${routeOnly}`);
+}
 
 const tokenSource = await readFile(path.join(root, 'src/frontend/styles/tokens.css'), 'utf8');
 for (const token of ['--space-4', '--container-narrow', '--control-height', '--field-height', '--z-dialog', '--focus-outline']) {
@@ -128,4 +147,4 @@ if (publicEntries.includes('js') || publicEntries.includes('css')) {
   throw new Error('Frontend source must not live under public/js or public/css after the structured-source migration.');
 }
 
-console.log(`PASS: structured page architecture + Phase 4 shared component/design-system ownership verified (${required.length} required paths).`);
+console.log(`PASS: structured page architecture + shared design system + Phase 5 route/style performance boundaries verified (${required.length} required paths).`);
