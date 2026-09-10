@@ -1,4 +1,4 @@
-name: Phase 11 Live Diagnostics
+name: Phase 11 Public Careers Edge Verification
 
 on:
   push:
@@ -9,74 +9,69 @@ permissions:
   contents: read
 
 jobs:
-  diagnose-live-cloudflare:
-    name: Diagnose live Cloudflare route invariants
+  verify-public-careers-edge:
+    name: Verify deployed public Careers boundary
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Probe each production invariant
+      - name: Exercise public Careers Edge Function
         shell: bash
         run: |
-          set -u
-          BASE='https://rcitcservices.frsmkgit.workers.dev'
-          failed=0
-          routes=(
-            '/'
-            '/careers'
-            '/contact'
-            '/services/it/cyber-security'
-            '/services/it/consultancy-services/agile'
-            '/careers/jobs/senior-data-engineer'
-            '/privacy'
-          )
+          set -euo pipefail
+          API='https://chsizmffzpxcqhaptjeu.supabase.co/functions/v1/public-careers'
 
-          echo '=== Route probes ==='
-          for route in "${routes[@]}"; do
-            body="/tmp/route-$(echo "$route" | tr '/ ' '__').html"
-            code=$(curl -sS --connect-timeout 10 --max-time 20 -o "$body" -w '%{http_code}' "${BASE}${route}" 2>"${body}.err" || true)
-            main=no; prerender=no
-            grep -q 'id="main-content"' "$body" 2>/dev/null && main=yes
-            grep -q 'data-prerendered-path=' "$body" 2>/dev/null && prerender=yes
-            bytes=$(wc -c < "$body" 2>/dev/null || echo 0)
-            echo "route=${route} status=${code:-none} main-content=${main} prerender-marker=${prerender} bytes=${bytes}"
-            if [[ -s "${body}.err" ]]; then sed 's/^/curl-error: /' "${body}.err"; fi
-            if [[ "$code" != '200' || "$main" != yes || "$prerender" != yes ]]; then failed=1; fi
-          done
+          health_code=$(curl -sS -D /tmp/health.headers -o /tmp/health.json -w '%{http_code}' "${API}/health")
+          test "$health_code" = '200'
+          grep -q '"ok":true' /tmp/health.json
+          grep -q '"service":"public-careers"' /tmp/health.json
+          grep -q '"contract":"phase11-public-read-v1"' /tmp/health.json
+          ! tr -d '\r' < /tmp/health.headers | grep -qi '^access-control-allow-origin:'
+          tr -d '\r' < /tmp/health.headers | grep -qi '^cache-control:.*no-store'
 
-          echo '=== Health probe ==='
-          health_code=$(curl -sS --connect-timeout 10 --max-time 20 -D /tmp/health.headers -o /tmp/health.json -w '%{http_code}' "${BASE}/api/health" 2>/tmp/health.err || true)
-          health_ok=no
-          grep -q '"ok":true' /tmp/health.json 2>/dev/null && health_ok=yes
-          echo "health status=${health_code:-none} ok-marker=${health_ok} body=$(tr -d '\n\r' < /tmp/health.json 2>/dev/null | head -c 500)"
-          [[ -s /tmp/health.err ]] && sed 's/^/health-curl-error: /' /tmp/health.err
-          if [[ "$health_code" != '200' || "$health_ok" != yes ]]; then failed=1; fi
+          list_code=$(curl -sS -D /tmp/list.headers -o /tmp/list.json -w '%{http_code}' \
+            -H 'content-type: application/json' \
+            --data '{"slug":null}' "${API}")
+          test "$list_code" = '200'
+          grep -q '"jobs":\[' /tmp/list.json
+          grep -q '"selected":' /tmp/list.json
+          grep -q '"slug":"senior-data-engineer"' /tmp/list.json
+          ! grep -Eq 'password_hash|csrf|service_role|secret_key|admin_id' /tmp/list.json
 
-          echo '=== Root deployment markers ==='
-          root_code=$(curl -sS --connect-timeout 10 --max-time 20 -D /tmp/root.headers -o /tmp/root.html -w '%{http_code}' "${BASE}/" 2>/tmp/root.err || true)
-          root_path=no; overrides=no; ldjson=no
-          grep -q 'data-prerendered-path="/"' /tmp/root.html 2>/dev/null && root_path=yes
-          grep -q 'global-overrides-' /tmp/root.html 2>/dev/null && overrides=yes
-          grep -q 'application/ld+json' /tmp/root.html 2>/dev/null && ldjson=yes
-          echo "root status=${root_code:-none} prerender-root=${root_path} global-overrides=${overrides} ldjson=${ldjson}"
-          grep -iE '^(cf-ray|server|cache-control|content-type):' /tmp/root.headers 2>/dev/null || true
-          [[ -s /tmp/root.err ]] && sed 's/^/root-curl-error: /' /tmp/root.err
-          if [[ "$root_code" != '200' || "$root_path" != yes || "$overrides" != yes || "$ldjson" != yes ]]; then failed=1; fi
+          detail_code=$(curl -sS -o /tmp/detail.json -w '%{http_code}' \
+            -H 'content-type: application/json' \
+            --data '{"slug":"senior-data-engineer"}' "${API}")
+          test "$detail_code" = '200'
+          grep -q '"selected":{' /tmp/detail.json
+          grep -q '"slug":"senior-data-engineer"' /tmp/detail.json
+          grep -q '"required_skills":' /tmp/detail.json
+          grep -q '"preferred_skills":' /tmp/detail.json
+          grep -q '"application_response_window":' /tmp/detail.json
+          ! grep -Eq 'password_hash|csrf|service_role|secret_key|admin_id' /tmp/detail.json
 
-          echo '=== Phase 11 job markers ==='
-          job_code=$(curl -sS --connect-timeout 10 --max-time 20 -D /tmp/job.headers -o /tmp/job.html -w '%{http_code}' "${BASE}/careers/jobs/senior-data-engineer" 2>/tmp/job.err || true)
-          canonical=no; robots=no; opening=no; active_apply=no; jobposting=no
-          grep -q "rel=\"canonical\" href=\"${BASE}/careers/jobs/senior-data-engineer\"" /tmp/job.html 2>/dev/null && canonical=yes
-          grep -q 'name="robots" content="index,follow"' /tmp/job.html 2>/dev/null && robots=yes
-          grep -q 'Applications opening soon' /tmp/job.html 2>/dev/null && opening=yes
-          grep -q 'href="/careers/jobs/senior-data-engineer/apply"' /tmp/job.html 2>/dev/null && active_apply=yes
-          grep -q '"@type":"JobPosting"' /tmp/job.html 2>/dev/null && jobposting=yes
-          echo "job status=${job_code:-none} canonical=${canonical} robots-index=${robots} opening-soon=${opening} active-apply=${active_apply} jobposting=${jobposting}"
-          [[ -s /tmp/job.err ]] && sed 's/^/job-curl-error: /' /tmp/job.err
+          invalid_code=$(curl -sS -o /tmp/invalid.json -w '%{http_code}' \
+            -H 'content-type: application/json' \
+            --data '{"slug":"BAD SLUG"}' "${API}")
+          test "$invalid_code" = '400'
+          grep -q '"code":"INVALID_SLUG"' /tmp/invalid.json
 
-          echo '=== Conclusion ==='
-          if [[ "$failed" == 0 ]]; then
-            echo 'Base readiness invariants are healthy.'
-          else
-            echo 'One or more base readiness invariants failed.' >&2
-            exit 1
-          fi
+          media_code=$(curl -sS -o /tmp/media.json -w '%{http_code}' --data '{}' "${API}")
+          test "$media_code" = '415'
+          grep -q '"code":"UNSUPPORTED_MEDIA_TYPE"' /tmp/media.json
+
+          get_code=$(curl -sS -D /tmp/get.headers -o /tmp/get.json -w '%{http_code}' "${API}")
+          test "$get_code" = '405'
+          tr -d '\r' < /tmp/get.headers | grep -qi '^allow: *POST'
+          grep -q '"code":"METHOD_NOT_ALLOWED"' /tmp/get.json
+
+          python3 - <<'PY'
+          import json
+          with open('/tmp/oversized.json', 'w', encoding='utf-8') as f:
+              json.dump({'slug': 'a' * 3000}, f)
+          PY
+          large_code=$(curl -sS -o /tmp/large.json -w '%{http_code}' \
+            -H 'content-type: application/json' \
+            --data-binary @/tmp/oversized.json "${API}")
+          test "$large_code" = '413'
+          grep -q '"code":"PAYLOAD_TOO_LARGE"' /tmp/large.json
+
+          echo 'PASS: deployed public Careers Edge boundary returns only public vacancy data and rejects invalid/oversized/unsupported requests.'
