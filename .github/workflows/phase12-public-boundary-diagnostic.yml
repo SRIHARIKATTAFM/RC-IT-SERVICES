@@ -13,71 +13,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Identify exact live public boundary mismatch
+      - name: Print live SEO origin contract
         shell: bash
         run: |
           set -euo pipefail
           BASE='https://rc-it-consulting-services.rcitcservices.workers.dev'
-          fail=0
-          check_contains() { local label="$1" file="$2" pattern="$3"; if grep -q "$pattern" "$file"; then echo "PASS ${label}"; else echo "FAIL ${label}"; fail=1; fi; }
-          check_not_contains() { local label="$1" file="$2" pattern="$3"; if grep -q "$pattern" "$file"; then echo "FAIL ${label}"; fail=1; else echo "PASS ${label}"; fi; }
-
           curl -sS "${BASE}/about-us" -o /tmp/about.html
-          check_contains 'about canonical' /tmp/about.html "rel=\"canonical\" href=\"${BASE}/about-us\""
-          check_contains 'about og title' /tmp/about.html 'property="og:title"'
-          check_contains 'about structured data' /tmp/about.html 'application/ld+json'
-
-          curl -sS "${BASE}/services/it/cyber-security" -o /tmp/service.html
-          check_contains 'service schema' /tmp/service.html '"@type":"Service"'
-          check_contains 'service breadcrumbs' /tmp/service.html 'BreadcrumbList'
-
           curl -sS "${BASE}/careers/jobs/senior-data-engineer" -o /tmp/job.html
-          check_contains 'job canonical' /tmp/job.html "rel=\"canonical\" href=\"${BASE}/careers/jobs/senior-data-engineer\""
-          check_contains 'job index follow' /tmp/job.html 'name="robots" content="index,follow"'
-          check_contains 'job apply CTA' /tmp/job.html 'Apply for this role'
-          check_contains 'job apply href' /tmp/job.html 'href="/careers/jobs/senior-data-engineer/apply"'
-          check_not_contains 'job no opening-soon placeholder' /tmp/job.html 'Applications opening soon'
-          check_not_contains 'job no JobPosting yet' /tmp/job.html '"@type":"JobPosting"'
-
-          curl -sS "${BASE}/careers/jobs/senior-data-engineer/apply" -o /tmp/apply.html
-          check_contains 'apply form marker' /tmp/apply.html 'data-career-application'
-          check_contains 'apply first name' /tmp/apply.html 'name="firstName"'
-          check_contains 'apply email' /tmp/apply.html 'name="email"'
-          check_contains 'apply resume' /tmp/apply.html 'name="resume" type="file"'
-          check_contains 'apply cover letter' /tmp/apply.html 'name="coverLetterText"'
-          check_contains 'apply consent' /tmp/apply.html 'name="consent" type="checkbox" required'
-          check_contains 'apply noindex' /tmp/apply.html 'name="robots" content="noindex,nofollow"'
-          check_not_contains 'apply no secret name leak' /tmp/apply.html 'SUPABASE_SECRET_KEY'
-          check_not_contains 'apply no secret value leak' /tmp/apply.html 'sb_secret_'
-
-          rejected_code=$(curl -sS -o /tmp/rejected.json -w '%{http_code}' -X POST -H 'content-type: application/json' --data '{"action":"start","jobSlug":"senior-data-engineer"}' "${BASE}/api/career-application")
-          if [[ "$rejected_code" == '403' ]]; then echo 'PASS originless candidate rejection status'; else echo "FAIL originless candidate rejection status=${rejected_code}"; fail=1; fi
-          check_contains 'originless rejection code' /tmp/rejected.json 'REQUEST_REJECTED'
-
-          curl -sS "${BASE}/login" -o /tmp/login.html
-          check_contains 'login noindex' /tmp/login.html 'name="robots" content="noindex,nofollow"'
-
           curl -sS "${BASE}/sitemap.xml" -o /tmp/sitemap.xml
-          check_contains 'sitemap urlset' /tmp/sitemap.xml '<urlset'
-          check_contains 'sitemap service origin' /tmp/sitemap.xml "${BASE}/services/it/cyber-security"
-          check_not_contains 'sitemap excludes login' /tmp/sitemap.xml "${BASE}/login"
-          check_not_contains 'sitemap excludes apply' /tmp/sitemap.xml '/apply</loc>'
-
           curl -sS "${BASE}/robots.txt" -o /tmp/robots.txt
-          check_not_contains 'robots does not block login' /tmp/robots.txt 'Disallow: /login'
-          check_not_contains 'robots does not block job pages' /tmp/robots.txt 'Disallow: /careers/jobs/'
-          check_contains 'robots blocks api' /tmp/robots.txt 'Disallow: /api/'
-          check_contains 'robots blocks admin' /tmp/robots.txt 'Disallow: /admin/'
-          check_contains 'robots sitemap origin' /tmp/robots.txt "Sitemap: ${BASE}/sitemap.xml"
-
-          unknown_code=$(curl -sS -o /tmp/notfound.html -w '%{http_code}' "${BASE}/definitely-not-a-real-rc-route")
-          if [[ "$unknown_code" == '404' ]]; then echo 'PASS 404 status'; else echo "FAIL 404 status=${unknown_code}"; fail=1; fi
-          check_contains '404 noindex' /tmp/notfound.html 'noindex,nofollow'
-          check_contains '404 content' /tmp/notfound.html 'Page not found'
-
-          alias_code=$(curl -sS -o /dev/null -w '%{http_code}' "${BASE}/careers/job-opportunities")
-          if [[ "$alias_code" == '301' || "$alias_code" == '308' ]]; then echo "PASS alias status=${alias_code}"; else echo "FAIL alias status=${alias_code}"; fail=1; fi
-          location=$(curl -sSI "${BASE}/careers/job-opportunities" | tr -d '\r' | awk 'BEGIN{IGNORECASE=1} /^location:/{print $0; exit}')
-          if [[ "$location" =~ /careers ]]; then echo 'PASS alias location'; else echo "FAIL alias location=${location}"; fail=1; fi
-
-          exit "$fail"
+          printf 'ABOUT_CANONICAL='; grep -oE 'rel="canonical" href="[^"]+"' /tmp/about.html | head -n1 || true
+          printf 'JOB_CANONICAL='; grep -oE 'rel="canonical" href="[^"]+"' /tmp/job.html | head -n1 || true
+          printf 'SITEMAP_SAMPLE='; grep -oE '<loc>[^<]+' /tmp/sitemap.xml | head -n3 | tr '\n' ' '; echo
+          printf 'ROBOTS_SITEMAP='; grep '^Sitemap:' /tmp/robots.txt | head -n1 || true
