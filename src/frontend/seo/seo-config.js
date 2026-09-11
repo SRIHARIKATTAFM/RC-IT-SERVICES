@@ -5,15 +5,15 @@ const configuredOrigin = environment.PUBLIC_ORIGIN || '';
 const workersBuildBranch = String(environment.WORKERS_CI_BRANCH || '').trim();
 
 export const SITE_NAME = 'RC IT Services';
-export const SITE_ORIGIN = String(configuredOrigin || 'https://rcitcservices.frsmkgit.workers.dev').replace(/\/+$/, '');
+export const SITE_ORIGIN = String(configuredOrigin || 'https://rc-it-consulting-services.rcitcservices.workers.dev').replace(/\/+$/, '');
 
 // Cloudflare Workers Builds exposes WORKERS_CI_BRANCH. Non-main branch builds are
 // preview deployments and must never become a second indexable copy of production.
 export const DEPLOYMENT_SEARCH_INDEXING_ENABLED = !workersBuildBranch || workersBuildBranch === 'main';
 
-// Keep individual vacancy URLs crawlable but out of search results until the real
-// application workflow is enabled. Google JobPosting markup requires an open job
-// with a working application path; Phase 12 owns that production capability.
+// Keep individual vacancy URLs crawlable but out of Google Job Search until the
+// dedicated JobPosting eligibility gate is separately approved. Phase 12 provides
+// a real application path, but structured job-search eligibility remains explicit.
 export const JOB_SEARCH_INDEXING_ENABLED = false;
 
 export const STATIC_PAGE_SEO = {
