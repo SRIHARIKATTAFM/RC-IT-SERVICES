@@ -12,7 +12,7 @@
     "check:admin-auth-security": "node scripts/check-admin-auth-security.mjs",
     "check:phase10-dashboard": "node scripts/check-phase10-admin-dashboard.mjs",
     "check:phase11-jobs": "node tests/admin-job-management.mjs && node tests/phase11-content-preservation.mjs && node tests/phase11-seed-integrity.mjs && node tests/phase11-spec-convergence.mjs && node tests/public-careers-provider-boundary.mjs && node tests/public-careers-runtime.mjs",
-    "check:phase12-applications": "node tests/phase12-candidate-contract.mjs && node tests/phase12-candidate-gateway.mjs && node tests/phase12-candidate-security.mjs && node tests/phase12-database-hardening.mjs && node tests/admin-candidate-applications.mjs && node tests/admin-portal-domain-separation.mjs && node tests/admin-dedicated-route-navigation.mjs",
+    "check:phase12-applications": "node tests/phase12-candidate-contract.mjs && node tests/phase12-candidate-gateway.mjs && node tests/phase12-candidate-security.mjs && node tests/phase12-database-hardening.mjs && node tests/phase12-seo-origin.mjs && node tests/admin-candidate-applications.mjs && node tests/admin-portal-domain-separation.mjs && node tests/admin-dedicated-route-navigation.mjs",
     "check:architecture": "node scripts/check-architecture.mjs && npm run check:backend-architecture && npm run check:persistence-architecture && npm run check:admin-auth-security && npm run check:phase10-dashboard && npm run check:phase11-jobs && npm run check:phase12-applications",
     "test:smoke": "node tests/smoke.mjs",
     "test:backend": "node tests/backend-foundation.mjs",
