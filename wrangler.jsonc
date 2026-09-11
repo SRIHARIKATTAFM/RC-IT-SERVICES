@@ -5,6 +5,7 @@
   "compatibility_date": "2026-09-08",
   "workers_dev": true,
   "vars": {
+    "SUPABASE_URL": "https://chsizmffzpxcqhaptjeu.supabase.co",
     "PUBLIC_CAREERS_API_URL": "https://chsizmffzpxcqhaptjeu.supabase.co/functions/v1/public-careers",
     "ADMIN_PROXY_BASE": "/admin",
     "ADMIN_PROXY_WILDCARD": "/admin/*"
