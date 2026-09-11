@@ -1,1 +1,0 @@
-Phase 11 post-merge release-gate scope only. No Phase 12 functionality.
