@@ -1,0 +1,32 @@
+name: Phase 12 Vercel Gateway Diagnostic
+
+on:
+  push:
+    branches: [phase-12-live-diagnostic]
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test candidate gateway status on Vercel fallback
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://rc-it-services.vercel.app'
+          code=$(curl -sS -o /tmp/body.json -w '%{http_code}' -X POST \
+            -H 'content-type: application/json' \
+            --data '{"action":"start","jobSlug":"senior-data-engineer"}' \
+            "${BASE}/api/career-application" || true)
+          echo "vercel_originless_status=${code}"
+          if grep -q 'REQUEST_REJECTED' /tmp/body.json; then
+            echo 'vercel_boundary=protected'
+          elif grep -q 'PERSISTENCE_UNAVAILABLE\|SERVICE_UNAVAILABLE' /tmp/body.json; then
+            echo 'vercel_boundary=unconfigured'
+          else
+            echo 'vercel_boundary=other'
+          fi
+          sed -E 's/[A-Za-z0-9_-]{24,}/[redacted]/g' /tmp/body.json | head -c 1000
+          echo
