@@ -18,7 +18,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          BASE='https://rcitcservices.frsmkgit.workers.dev'
+          BASE='https://rc-it-consulting-services.rcitcservices.workers.dev'
           VERIFY_ID="$(date +%s)-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           EMAIL="phase12-verification-${VERIFY_ID}@example.invalid"
 
@@ -48,7 +48,7 @@ jobs:
 
           start_code=$(curl -sS -o /tmp/start-response.json -w '%{http_code}' -X POST \
             -H 'content-type: application/json' \
-            -H 'origin: https://rcitcservices.frsmkgit.workers.dev' \
+            -H 'origin: https://rc-it-consulting-services.rcitcservices.workers.dev' \
             --data-binary @/tmp/start.json \
             "${BASE}/api/career-application")
 
@@ -84,7 +84,7 @@ jobs:
           printf '{"action":"cancel","intakeToken":"%s"}' "$intake_token" > /tmp/cancel.json
           cancel_code=$(curl -sS -o /tmp/cancel-response.json -w '%{http_code}' -X POST \
             -H 'content-type: application/json' \
-            -H 'origin: https://rcitcservices.frsmkgit.workers.dev' \
+            -H 'origin: https://rc-it-consulting-services.rcitcservices.workers.dev' \
             --data-binary @/tmp/cancel.json \
             "${BASE}/api/career-application")
 
@@ -96,4 +96,4 @@ jobs:
           NODE
 
           rm -f /tmp/start.json /tmp/start-response.json /tmp/cancel.json /tmp/cancel-response.json
-          echo 'PASS: production candidate intake started through the public Worker, returned the secure upload contract, and was immediately cancelled without exposing intake or upload credentials.'
+          echo 'PASS: production candidate intake started through the actual Cloudflare Worker, returned the secure upload contract, and was immediately cancelled without exposing intake or upload credentials.'
