@@ -1,0 +1,99 @@
+name: Phase 12 Production Acceptance Diagnostic
+
+on:
+  push:
+    branches: [phase-12-production-acceptance-diagnostic]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  candidate-intake:
+    name: Verify real production candidate intake start and cancel
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Start and cancel a real production intake without exposing tokens
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://rcitcservices.frsmkgit.workers.dev'
+          VERIFY_ID="$(date +%s)-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          EMAIL="phase12-verification-${VERIFY_ID}@example.invalid"
+
+          cat > /tmp/start.json <<JSON
+          {
+            "action": "start",
+            "jobSlug": "senior-data-engineer",
+            "firstName": "Phase",
+            "lastName": "Verification",
+            "email": "${EMAIL}",
+            "phone": "+1 202 555 0100",
+            "location": "Production verification",
+            "coverLetterText": "Automated Phase 12 production acceptance verification. This intake is cancelled immediately and must never become an application record.",
+            "consent": true,
+            "consentVersion": "rcitcs-candidate-privacy-v1",
+            "website": "",
+            "documents": [
+              {
+                "kind": "resume",
+                "fileName": "phase12-verification.pdf",
+                "mimeType": "application/pdf",
+                "sizeBytes": 128
+              }
+            ]
+          }
+          JSON
+
+          start_code=$(curl -sS -o /tmp/start-response.json -w '%{http_code}' -X POST \
+            -H 'content-type: application/json' \
+            -H 'origin: https://rcitcservices.frsmkgit.workers.dev' \
+            --data-binary @/tmp/start.json \
+            "${BASE}/api/career-application")
+
+          if [[ "$start_code" != '201' ]]; then
+            echo "Production intake start failed with HTTP ${start_code}." >&2
+            node - <<'NODE'
+          const fs = require('fs');
+          const body = JSON.parse(fs.readFileSync('/tmp/start-response.json', 'utf8') || '{}');
+          console.error(JSON.stringify({ ok: body.ok, code: body.code, message: body.message }));
+          NODE
+            exit 1
+          fi
+
+          intake_token=$(node - <<'NODE'
+          const fs = require('fs');
+          const body = JSON.parse(fs.readFileSync('/tmp/start-response.json', 'utf8'));
+          if (body.ok !== true || typeof body.intakeToken !== 'string' || body.intakeToken.length < 40) process.exit(2);
+          process.stdout.write(body.intakeToken);
+          NODE
+          )
+
+          test -n "$intake_token"
+
+          node - <<'NODE'
+          const fs = require('fs');
+          const body = JSON.parse(fs.readFileSync('/tmp/start-response.json', 'utf8'));
+          if (body.ok !== true) throw new Error('start response not ok');
+          if (!body.job || body.job.slug !== 'senior-data-engineer') throw new Error('job snapshot missing or incorrect');
+          if (!body.upload || !Array.isArray(body.upload.documents) || body.upload.documents.length !== 1) throw new Error('signed upload contract missing');
+          if (body.consentVersion !== 'rcitcs-candidate-privacy-v1') throw new Error('consent contract mismatch');
+          NODE
+
+          printf '{"action":"cancel","intakeToken":"%s"}' "$intake_token" > /tmp/cancel.json
+          cancel_code=$(curl -sS -o /tmp/cancel-response.json -w '%{http_code}' -X POST \
+            -H 'content-type: application/json' \
+            -H 'origin: https://rcitcservices.frsmkgit.workers.dev' \
+            --data-binary @/tmp/cancel.json \
+            "${BASE}/api/career-application")
+
+          test "$cancel_code" = '200'
+          node - <<'NODE'
+          const fs = require('fs');
+          const body = JSON.parse(fs.readFileSync('/tmp/cancel-response.json', 'utf8'));
+          if (body.ok !== true || body.cancelled !== true) throw new Error('intake cancellation not confirmed');
+          NODE
+
+          rm -f /tmp/start.json /tmp/start-response.json /tmp/cancel.json /tmp/cancel-response.json
+          echo 'PASS: production candidate intake started through the public Worker, returned the secure upload contract, and was immediately cancelled without exposing intake or upload credentials.'
