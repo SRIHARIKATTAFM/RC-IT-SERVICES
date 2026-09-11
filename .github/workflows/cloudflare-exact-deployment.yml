@@ -1,0 +1,74 @@
+name: Cloudflare Exact Deployment Gate
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-exact-deployment-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  exact-production:
+    name: Verify exact main SHA on Cloudflare production
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Wait for exact main commit to reach production
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          BASE='https://rc-it-consulting-services.rcitcservices.workers.dev'
+
+          for attempt in $(seq 1 72); do
+            code=$(curl -sS -o /tmp/root.html -w '%{http_code}' "${BASE}/" || true)
+            if [[ "$code" == '200' ]] \
+              && grep -Fq "name=\"rc-deployment-sha\" content=\"${EXPECTED_SHA}\"" /tmp/root.html \
+              && grep -q 'data-prerendered-path="/"' /tmp/root.html \
+              && grep -q 'application/ld+json' /tmp/root.html; then
+              echo "Exact main SHA ${EXPECTED_SHA} is live on Cloudflare production."
+              exit 0
+            fi
+
+            if [[ "$attempt" == '72' ]]; then
+              echo "Cloudflare production did not expose exact main SHA ${EXPECTED_SHA} within the verification window." >&2
+              echo 'This usually means the production Worker build did not deploy, deployed to a different Worker, or the live origin is stale.' >&2
+              exit 1
+            fi
+            sleep 5
+          done
+
+      - name: Verify exact deployment Phase 12 runtime boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://rc-it-consulting-services.rcitcservices.workers.dev'
+
+          curl -sS "${BASE}/careers/jobs/senior-data-engineer" -o /tmp/job.html
+          grep -q 'name="robots" content="index,follow"' /tmp/job.html
+          grep -q 'data-runtime-job-posting' /tmp/job.html
+          grep -q '"@type":"JobPosting"' /tmp/job.html
+          grep -q '"directApply":true' /tmp/job.html
+          grep -q 'href="/careers/jobs/senior-data-engineer/apply"' /tmp/job.html
+
+          curl -sS "${BASE}/careers/jobs/senior-data-engineer/apply" -o /tmp/apply.html
+          grep -q 'data-career-application' /tmp/apply.html
+          grep -q 'name="robots" content="noindex,nofollow"' /tmp/apply.html
+          ! grep -q 'data-runtime-job-posting' /tmp/apply.html
+
+          curl -sS "${BASE}/sitemap.xml" -o /tmp/sitemap.xml
+          grep -Fq "${BASE}/careers/jobs/senior-data-engineer</loc>" /tmp/sitemap.xml
+          ! grep -q '/apply</loc>' /tmp/sitemap.xml
+
+          health_code=$(curl -sS -o /tmp/health.json -w '%{http_code}' "${BASE}/api/health")
+          test "$health_code" = '200'
+          grep -q '"ok":true' /tmp/health.json
+
+          echo 'Exact deployed Phase 12 vacancy indexing, JobPosting, application noindex, runtime sitemap and API health verified.'
