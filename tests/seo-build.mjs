@@ -11,6 +11,7 @@ import {
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dist = path.join(root, 'dist');
+const expectedDeploymentSha = String(process.env.WORKERS_CI_COMMIT_SHA || process.env.GITHUB_SHA || 'development').trim();
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -32,6 +33,7 @@ for (const route of prerenderRoutes) {
   const seo = getSeoForRoute(route);
   assert(html.includes('id="main-content"'), `Prerendered main content missing: ${route}`);
   assert(html.includes(`data-prerendered-path="${route}"`), `Prerender marker missing: ${route}`);
+  assert(html.includes(`name="rc-deployment-sha" content="${escaped(expectedDeploymentSha)}"`), `Exact deployment SHA marker missing: ${route}`);
   assert(html.includes(`<title>${escaped(seo.title)}</title>`), `SEO title missing from prerendered HTML: ${route}`);
   assert(html.includes(`rel="canonical" href="${seo.canonical}"`), `Canonical missing from prerendered HTML: ${route}`);
   assert(html.includes('property="og:title"'), `Open Graph metadata missing: ${route}`);
@@ -44,7 +46,7 @@ for (const route of prerenderRoutes) {
 
 const sitemap = await readFile(path.join(dist, 'sitemap.xml'), 'utf8');
 const sitemapLocations = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]);
-assert(sitemapLocations.length === getIndexableRoutes().length, 'Generated sitemap route count does not match centralized indexability policy.');
+assert(sitemapLocations.length === getIndexableRoutes().length, 'Generated sitemap route count does not match centralized static indexability policy.');
 assert(new Set(sitemapLocations).size === sitemapLocations.length, 'Generated sitemap contains duplicate URLs.');
 assert(!sitemap.includes('/login</loc>'), 'Login leaked into generated sitemap.');
 assert(!sitemap.includes('/apply</loc>'), 'Application route leaked into generated sitemap.');
@@ -54,7 +56,7 @@ assert(robots.includes(`Sitemap: ${SITE_ORIGIN}/sitemap.xml`), 'Generated robots
 assert(robots.includes('Disallow: /api/'), 'API robots rule missing.');
 assert(robots.includes('Disallow: /admin/'), 'Admin robots rule missing.');
 assert(!robots.includes('Disallow: /login'), 'Login must remain crawlable so its noindex directive can be observed.');
-assert(!robots.includes('Disallow: /careers/jobs/'), 'Job and application routes must remain crawlable so their noindex directives can be observed.');
+assert(!robots.includes('Disallow: /careers/jobs/'), 'Job and application routes must remain crawlable so page-level directives can be observed.');
 
 const redirects = await readFile(path.join(dist, '_redirects'), 'utf8');
 for (const alias of ['/consult-expert', '/careers/job-opportunities', '/careers/upload-your-resume', '/index.php']) {
@@ -65,11 +67,12 @@ const notFound = await readFile(path.join(dist, '404.html'), 'utf8');
 assert(notFound.includes('Page Not Found | RC IT Services'), 'Custom 404 title missing.');
 assert(notFound.includes('noindex,nofollow'), 'Custom 404 is not noindex.');
 assert(notFound.includes('Page not found'), 'Custom 404 user-facing content missing.');
+assert(notFound.includes(`name="rc-deployment-sha" content="${escaped(expectedDeploymentSha)}"`), 'Custom 404 is missing the exact deployment SHA marker.');
 
 const staticJobs = getPublishedJobs();
 assert(staticJobs.length === 0, 'Phase 11 must not prerender legacy source-code job records.');
 assert(!prerenderRoutes.some((route) => route.startsWith('/careers/jobs/')), 'Database-backed job routes must not be frozen into the static build.');
-assert(!sitemap.includes('/careers/jobs/'), 'Phase 11 job routes must remain outside the static sitemap while application indexing eligibility is disabled.');
+assert(!sitemap.includes('/careers/jobs/'), 'Database-backed vacancy URLs must be added at runtime rather than frozen into the static sitemap.');
 
 const careersHtml = await readFile(outputPath('/careers'), 'utf8');
 assert(careersHtml.includes('No roles are currently published.'), 'Static Careers baseline must truthfully render no openings before runtime data is loaded.');
@@ -87,4 +90,4 @@ const fallbackHeaders = vercelConfig.headers?.find((entry) => entry.source === '
 const fallbackRobots = fallbackHeaders.find((header) => header.key.toLowerCase() === 'x-robots-tag')?.value;
 assert(fallbackRobots === 'noindex, nofollow', 'Secondary Vercel fallback lost its global noindex response header.');
 
-console.log(`PASS: ${prerenderRoutes.length} static HTML routes, ${sitemapLocations.length} eligible sitemap URLs, runtime-owned job routes, crawl/noindex directives, redirects, structured data, fallback isolation and real 404 output verified.`);
+console.log(`PASS: ${prerenderRoutes.length} static HTML routes, ${sitemapLocations.length} static sitemap URLs, exact deployment SHA markers, runtime-owned job routes, crawl/noindex directives, redirects, structured data, fallback isolation and real 404 output verified.`);
