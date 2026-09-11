@@ -2,29 +2,33 @@
 
 ## Status
 
-`PENDING CLOUDFLARE ACCOUNT / ZONE LINKAGE`
+`PENDING FINAL PUBLIC-DOMAIN CUTOVER`
 
-The requested production domain is `rcitcs.com` with `www.rcitcs.com` normalized to the apex domain. Two controlled production attempts were made after all application and preview checks passed:
+The requested public production domain is `rcitcs.com` with `www.rcitcs.com` normalized to the apex domain. The website is currently deployed through the verified Cloudflare Worker named `rc-it-consulting-services` in the active RC IT Services Cloudflare account.
 
-1. Worker Custom Domains for `rcitcs.com` and `www.rcitcs.com`.
-2. Zone-scoped Worker routes for `rcitcs.com/*` and `www.rcitcs.com/*`.
+The verified production Worker endpoint is:
 
-Both were rejected by Cloudflare at production route promotion while the same source built successfully and uploaded as a branch Worker version. This proves the application bundle is valid and isolates the blocker to production access to the `rcitcs.com` Cloudflare zone from the existing `rcitcservices` Worker/Workers Builds deployment identity.
+`https://rc-it-consulting-services.rcitcservices.workers.dev`
 
-## Safety recovery
+The separate private administration surface uses its dedicated admin hostname architecture and is not the canonical origin for public website SEO.
 
-Until the account/zone linkage is corrected, production configuration intentionally remains on the verified Workers endpoint:
+## Safety position before custom-domain cutover
 
-`https://rcitcservices.frsmkgit.workers.dev`
+Until `rcitcs.com` is explicitly verified as the public website production origin, the SEO canonical origin, sitemap entries, robots sitemap reference and production route verification must remain on the verified Workers endpoint above. Canonicals must not advertise an unverified future domain.
 
-The SEO canonical origin, sitemap, robots reference and production route verification also remain on that working origin. This avoids advertising an unreachable canonical domain or accidentally applying `noindex` to the only live production origin.
+The retired Worker hostname `https://rcitcservices.frsmkgit.workers.dev` is no longer the active production deployment and must not be emitted by public canonical URLs, sitemap output, robots output, application trust allowlists or release verification.
 
-## Required infrastructure resolution
+## Required final infrastructure resolution
 
-The Worker deployment identity and the `rcitcs.com` zone must be in an accessible Cloudflare account scope with permission to attach the Worker to the zone. Once that is true, the preferred final model remains Worker Custom Domains because this Worker is the website origin; Cloudflare can then own the DNS mapping and TLS issuance.
+When the public-domain cutover phase is executed, `rcitcs.com` and `www.rcitcs.com` must be attached to the verified production Worker in the correct Cloudflare account/zone, with DNS and TLS verified before `PUBLIC_ORIGIN` is changed.
 
-The cutover must be re-applied and live-verified before `rcitcs.com` is declared production.
+The preferred final model remains a Worker Custom Domain because the Worker is the website origin. After live verification:
+
+- `rcitcs.com` becomes the public canonical origin;
+- `www.rcitcs.com` normalizes to the apex;
+- the Workers endpoint remains an infrastructure endpoint rather than the advertised canonical site;
+- canonical tags, sitemap entries, robots sitemap reference and production smoke checks are changed together in one controlled cutover.
 
 ## Email boundary
 
-The intended inbound destination remains `rcitcservices@gmail.com`. Cloudflare Email Routing aliases are still planned for `info@rcitcs.com`, `contact@rcitcs.com`, `support@rcitcs.com`, `career@rcitcs.com` and `legal@rcitcs.com`. Email Routing requires the destination verification and zone-level routing configuration; it has not been falsely marked configured.
+The intended inbound destination remains `rcitcservices@gmail.com`. Cloudflare Email Routing aliases remain planned for `info@rcitcs.com`, `contact@rcitcs.com`, `support@rcitcs.com`, `career@rcitcs.com` and `legal@rcitcs.com`. Email Routing requires destination verification and zone-level routing configuration and must not be marked configured until that work is independently verified.
