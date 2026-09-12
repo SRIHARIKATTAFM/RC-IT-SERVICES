@@ -1,0 +1,23 @@
+name: Admin Workspace Live Diagnostic
+
+on:
+  push:
+    branches:
+      - diagnostic/admin-workspace-live
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe Supabase admin workspace runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error \
+            --max-time 20 \
+            'https://chsizmffzpxcqhaptjeu.supabase.co/functions/v1/admin-workspace-diagnostic'
+          echo
