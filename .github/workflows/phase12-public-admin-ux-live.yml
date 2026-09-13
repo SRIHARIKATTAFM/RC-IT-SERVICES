@@ -1,0 +1,72 @@
+name: Phase 12 Public and Admin UX Live Gate
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase12-public-admin-ux-live-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-live-surfaces:
+    name: Verify public apex and modal admin shell
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Wait for the public apex and current admin interaction script
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          public_ok=0
+          for attempt in $(seq 1 50); do
+            if getent ahosts rcitcs.com >/dev/null 2>&1; then
+              code=$(curl -L -sS -o /tmp/public.html -w '%{http_code}' 'https://rcitcs.com/' || true)
+              echo "public attempt=${attempt} status=${code}"
+              if [[ "$code" == '200' ]] \
+                && grep -q 'Technology that' /tmp/public.html \
+                && ! grep -q 'Administrator sign in' /tmp/public.html; then
+                public_ok=1
+                break
+              fi
+            else
+              echo "public attempt=${attempt} dns=unresolved"
+            fi
+            sleep 5
+          done
+          if [[ "$public_ok" != '1' ]]; then
+            echo 'rcitcs.com did not become a reachable public corporate site.' >&2
+            exit 1
+          fi
+
+          admin_ok=0
+          for attempt in $(seq 1 50); do
+            admin_code=$(curl -sS -o /tmp/admin.html -w '%{http_code}' 'https://admin.rcitcs.com/' || true)
+            script_code=$(curl -sS -D /tmp/admin-interactions.headers -o /tmp/admin-interactions.js -w '%{http_code}' 'https://admin.rcitcs.com/__rc-admin/interactions.js' || true)
+            echo "admin attempt=${attempt} page=${admin_code} script=${script_code}"
+            if [[ "$admin_code" == '200' ]] \
+              && [[ "$script_code" == '200' ]] \
+              && grep -q 'Administrator sign in' /tmp/admin.html \
+              && grep -Fq 'data-rc-admin-interactions' /tmp/admin.html \
+              && grep -Fq 'data-rc-admin-modal' /tmp/admin-interactions.js \
+              && grep -Fq 'renderModalError' /tmp/admin-interactions.js \
+              && grep -Fq 'explicitModal' /tmp/admin-interactions.js \
+              && ! grep -Fq 'location.reload(' /tmp/admin-interactions.js; then
+              admin_ok=1
+              break
+            fi
+            sleep 5
+          done
+          if [[ "$admin_ok" != '1' ]]; then
+            echo 'admin.rcitcs.com did not deploy the modal-safe interaction release.' >&2
+            exit 1
+          fi
+
+          tr -d '\r' < /tmp/admin-interactions.headers | grep -qi '^cache-control:.*no-store'
+          tr -d '\r' < /tmp/admin-interactions.headers | grep -qi '^cross-origin-resource-policy: *same-origin'
+          echo 'PASS: public apex resolves independently and the admin host serves the modal-safe touch interaction layer.'

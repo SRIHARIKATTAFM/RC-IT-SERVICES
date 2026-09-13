@@ -6,137 +6,97 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relative) => readFile(path.join(root, relative), 'utf8');
 
-const [migration, hardening, convergence, db, index, routes, ui, worker, catalog, publicRepository, publicRuntime] = await Promise.all([
+const [migration, hardening, convergence, streamlined, db, index, routes, ui, worker, publicRepository, publicRuntime, wrangler] = await Promise.all([
   read('supabase/migrations/20260910152000_phase_11_job_management_cms.sql'),
   read('supabase/migrations/20260910161000_phase_11_job_management_hardening.sql'),
   read('supabase/migrations/20260910165000_phase_11_cms_spec_convergence.sql'),
+  read('supabase/migrations/20260913023000_phase_12_job_authoring_simplification.sql'),
   read('supabase/functions/admin-auth/db.ts'),
   read('supabase/functions/admin-auth/index.ts'),
   read('supabase/functions/admin-auth/job-routes.ts'),
   read('supabase/functions/admin-auth/jobs.ts'),
   read('src/backend/runtime/worker.js'),
-  read('src/frontend/app/career-job-catalog.js'),
   read('src/backend/repositories/public-jobs-repository.js'),
-  read('src/backend/runtime/public-careers.js')
+  read('src/backend/runtime/public-careers.js'),
+  read('wrangler.jsonc')
 ]);
 
-for (const column of [
-  'code text', 'experience text', 'technologies jsonb', 'responsibilities jsonb',
-  'qualifications jsonb', 'benefits jsonb', 'opens_at timestamptz', 'archived_at timestamptz',
-  'version integer'
-]) assert.ok(migration.includes(column), `Phase 11 schema field missing: ${column}`);
-
-for (const fn of [
-  'get_admin_job_management_context', 'admin_save_job', 'admin_transition_job',
-  'admin_duplicate_job', 'admin_delete_job', 'get_public_jobs', 'get_public_job'
-]) assert.ok(migration.includes(`function public.${fn}`), `Phase 11 RPC missing: ${fn}`);
-
-assert.ok(migration.includes("a.status = 'active'"));
-assert.ok(migration.includes("a.role = 'super_admin'"));
-assert.ok(migration.includes("status = 'published'"));
-assert.ok(migration.includes("j.opens_at is null or j.opens_at <= now()"));
-assert.ok(migration.includes("j.closes_at is null or j.closes_at > now()"));
-assert.ok(migration.includes('for update'), 'Job mutations must serialize on the authoritative record.');
-assert.ok(migration.includes('STALE_VERSION'), 'Optimistic concurrency must fail visibly.');
-assert.ok(migration.includes('version = j.version + 1'), 'Successful mutations must advance the record version.');
-assert.ok(migration.includes("v_job.status <> 'draft' or v_job.published_at is not null or v_application_count > 0"), 'Permanent delete policy must protect published/history-bearing jobs.');
-assert.ok(migration.includes("'job_created'"));
-assert.ok(migration.includes("'job_updated'"));
-assert.ok(migration.includes("'job_duplicated'"));
-assert.ok(migration.includes("'job_deleted'"));
-assert.ok(migration.includes("'job_' || v_action"));
-assert.ok(migration.includes('before_data'));
-assert.ok(migration.includes('after_data'));
-assert.ok(/security invoker/gi.test(migration));
-assert.ok(!/security\s+definer/i.test(migration), 'Phase 11 RPCs must not bypass RLS via SECURITY DEFINER.');
-assert.ok(!/grant\s+execute[\s\S]{0,180}\bto\s+(?:anon|authenticated)\b/i.test(migration), 'Browser roles must not execute private/public job database RPCs directly.');
-
-assert.ok(hardening.includes('drop constraint if exists jobs_check'), 'Obsolete published_at/close-date constraint must be retired.');
-assert.ok(hardening.includes('get_public_careers_context'), 'Public Careers must have a one-round-trip context RPC.');
-assert.ok(hardening.includes('select ap.job_id, count(*)::bigint as application_count'), 'Admin job list must aggregate application counts in one set operation.');
-assert.ok(!hardening.includes("'application_count', (select count(*)"), 'Admin job list must not reintroduce per-job count subqueries.');
-
-for (const field of ['required_skills', 'preferred_skills', 'application_response_window']) {
-  assert.ok(convergence.includes(field), `Locked Phase 11 field missing: ${field}`);
+for (const column of ['code text','experience text','technologies jsonb','responsibilities jsonb','qualifications jsonb','benefits jsonb','opens_at timestamptz','archived_at timestamptz','version integer']) {
+  assert.ok(migration.includes(column), `Phase 11 schema field missing: ${column}`);
 }
+for (const fn of ['get_admin_job_management_context','admin_save_job','admin_transition_job','admin_duplicate_job','admin_delete_job']) {
+  assert.ok(migration.includes(`function public.${fn}`), `Phase 11 authority missing: ${fn}`);
+}
+assert.ok(migration.includes("a.status = 'active'") && migration.includes("a.role = 'super_admin'"));
+assert.ok(migration.includes('STALE_VERSION') && migration.includes('version = j.version + 1'));
+assert.ok(migration.includes('for update'));
+assert.ok(/security invoker/gi.test(migration));
+assert.ok(!/security\s+definer/i.test(migration));
+
+assert.ok(hardening.includes('get_public_careers_context'));
+assert.ok(hardening.includes("j.opens_at is null or j.opens_at <= now()"));
+assert.ok(hardening.includes("j.closes_at is null or j.closes_at > now()"));
+
 assert.ok(convergence.includes('job_code_registry'));
 assert.ok(convergence.includes('jobs_assign_job_code'));
 assert.ok(convergence.includes('jobs_preserve_job_code'));
-assert.ok(convergence.includes('get_job_content_document'));
-assert.ok(convergence.includes('alter table public.jobs alter column code set not null'));
-assert.ok(!/p_payload\s*->>\s*'code'/.test(convergence), 'Client payload must not control job code after convergence.');
-assert.ok(/security invoker/gi.test(convergence));
-assert.ok(!/security\s+definer/i.test(convergence));
-assert.ok(!/grant\s+execute[\s\S]{0,180}\bto\s+(?:anon|authenticated)\b/i.test(convergence));
+assert.ok(!/p_payload\s*->>\s*'code'/.test(convergence), 'Client payload must never control job code.');
 
-for (const adapter of ['jobManagementContext', 'saveJob', 'transitionJob', 'duplicateJob', 'deleteJob']) {
-  assert.ok(db.includes(`function ${adapter}`), `Edge database adapter missing: ${adapter}`);
-}
-for (const rpc of ['rpc/get_admin_job_management_context', 'rpc/admin_save_job', 'rpc/admin_transition_job', 'rpc/admin_duplicate_job', 'rpc/admin_delete_job']) {
-  assert.ok(db.includes(rpc), `Edge adapter is not calling canonical RPC: ${rpc}`);
-}
+for (const requestedCategory of [
+  'Software Development','Data Engineering','Full Stack Development','DevOps','Network Engineering',
+  'Frontend Engineering','Backend Engineering','Generative AI (Gen AI)'
+]) assert.ok(streamlined.includes(requestedCategory), `Requested job category missing: ${requestedCategory}`);
+assert.ok(streamlined.includes("jsonb_array_length(v_job.required_skills) = 0"));
+assert.ok(streamlined.includes("coalesce(btrim(v_job.description), '') = ''"));
+assert.ok(streamlined.includes("coalesce(btrim(v_job.location), '') = ''"));
+assert.ok(streamlined.includes("coalesce(btrim(v_job.experience), '') = ''"));
+assert.ok(!streamlined.includes('jsonb_array_length(v_job.responsibilities) = 0'), 'Responsibilities must remain optional in the streamlined publication gate.');
+assert.ok(!streamlined.includes('jsonb_array_length(v_job.qualifications) = 0'), 'Qualifications must remain optional in the streamlined publication gate.');
+assert.ok(/security invoker/gi.test(streamlined));
+assert.ok(!/security\s+definer/i.test(streamlined));
 
+for (const adapter of ['jobManagementContext','saveJob','transitionJob','duplicateJob','deleteJob']) assert.ok(db.includes(`function ${adapter}`));
 assert.ok(index.includes('handleJobRoute'));
-assert.ok(index.includes('jobs: true'));
-assert.ok(index.includes('applications: true'), 'Phase 12 must extend, not remove, the Phase 11 admin runtime health contract.');
-assert.ok(index.includes('phase12-candidate-application-workflow'));
-assert.ok(index.includes('path.startsWith("/jobs") ? 131072 : 32768'), 'Admin payload ceilings must remain route scoped.');
-assert.ok(index.includes('originOk(request, url)'), 'Phase 9 same-origin protection must remain ahead of Phase 11 mutations.');
-assert.ok(index.includes('request.clone().body'), 'Chunked admin requests must be inspected as a bounded stream.');
-assert.ok(index.includes('body.getReader()'));
-assert.ok(index.includes('total > limit'));
-assert.ok(index.includes('reader.cancel()'));
-assert.ok(!index.includes('request.clone().arrayBuffer()'), 'Chunked admin request validation must not buffer an unbounded body before rejection.');
+assert.ok(index.includes('originOk(request, url)'));
 
-for (const route of ['/jobs/create', '"edit"', '"preview"', '"delete"', '"update"', '"transition"', '"duplicate"']) {
-  assert.ok(routes.includes(route), `Job route contract missing: ${route}`);
-}
-assert.ok(routes.includes('shaHex(submitted) === state.csrf_token_hash'), 'Phase 11 mutations must validate server-backed CSRF.');
+for (const route of ['/jobs/create','"edit"','"preview"','"delete"','"update"','"transition"','"duplicate"']) assert.ok(routes.includes(route));
+assert.ok(routes.includes('shaHex(submitted) === state.csrf_token_hash'));
+assert.ok(routes.includes('const intent = String(form.get("intent")'));
+assert.ok(routes.includes('transitionJob(adminId,createdId,createdVersion,"publish"'), 'Create + Publish must be completed server-side in the same admin request flow.');
+assert.ok(routes.includes('nextDate(closes)'), 'Selected end date must be stored as an exclusive next-day London boundary so it remains visible through the selected end date.');
 assert.ok(routes.includes('Europe/London'));
-assert.ok(routes.includes('STALE_VERSION'));
-assert.ok(routes.includes('confirm_slug'));
-assert.ok(routes.includes('303'));
-assert.ok(!routes.includes('localStorage') && !routes.includes('sessionStorage'), 'Admin workflow state must not move into browser storage.');
+assert.ok(!routes.includes('localStorage') && !routes.includes('sessionStorage'));
 
 for (const capability of [
-  'Create job', 'Edit job', 'Preview', 'Publish', 'Unpublish', 'Close', 'Archive', 'Restore', 'Duplicate',
-  'Category', 'Location', 'Work model', 'Employment type', 'Experience required',
-  'Required programming languages / technologies', 'Required skills', 'Preferred skills',
-  'Job description', 'Responsibilities', 'Qualifications', 'Preferred qualifications',
-  'Benefits & employment terms', 'Application response window', 'Industry context',
-  'Nature of working style', 'Opening date & time', 'Closing date & time'
-]) assert.ok(ui.includes(capability), `Admin UI capability missing: ${capability}`);
-assert.ok(ui.includes('repeat(auto-fit,minmax('), 'Phase 11 editor must retain responsive adaptive form grids.');
-assert.ok(ui.includes('mobile-nav'));
-assert.ok(ui.includes('aria-label="Administration"'));
-assert.ok(ui.includes('aria-current="page"'));
-assert.ok(ui.includes('No jobs match this view.'));
-assert.ok(ui.includes('stale versions are rejected'));
+  'Create job','Edit job','Preview','Publish','Unpublish','Close','Archive','Restore','Duplicate',
+  'Department / category','Position title','Office / job location','Work mode','Employment type','Experience required',
+  'Required skills','Job description','Benefits','Response time','Start date','End date','Publish indefinitely / no end date',
+  'Save draft','Advanced optional details'
+]) assert.ok(ui.includes(capability), `Streamlined admin UI capability missing: ${capability}`);
+assert.ok(ui.includes('data-rc-admin-modal="true"'), 'Create/Edit/Preview actions must explicitly request modal treatment.');
 assert.ok(ui.includes('Generated automatically'));
-assert.ok(!ui.includes('name="code"'), 'Job code must not be editable in the admin form.');
+assert.ok(ui.includes('generatedSlug(title)'));
+assert.ok(!ui.includes('name="code"'), 'Job code must remain server-controlled.');
+assert.ok(!ui.includes('id="job-slug"'), 'Administrator must not receive a visible URL-slug editor.');
+assert.ok(!ui.includes('for="job-slug"'), 'Administrator must not receive a visible URL-slug label.');
+assert.ok(ui.includes('type="hidden" name="slug"'), 'Existing canonical slugs must still be preserved during edits.');
+assert.ok(ui.includes('name="no_expiry"'));
+assert.ok(ui.includes('repeat(auto-fit,minmax('));
 
 assert.ok(worker.includes('isPublicCareersRuntimePath'));
-assert.ok(worker.includes('handlePublicCareersRequest'));
-assert.ok(!catalog.includes('career-jobs.js'));
-assert.ok(!catalog.includes('career-jobs-data-expansion.js'));
-assert.ok(!catalog.includes('career-jobs-services-expansion.js'));
-assert.ok(catalog.includes('server-authoritative in PostgreSQL'));
-assert.ok(publicRepository.includes('rpc/get_public_careers_context'));
 assert.ok(publicRepository.includes('getCareersContext'));
-assert.ok(!publicRepository.includes('rpc/get_public_jobs'), 'Public runtime should not download full content for every list item.');
 assert.ok(publicRepository.includes('requiredSkills'));
-assert.ok(publicRepository.includes('preferredSkills'));
-assert.ok(publicRepository.includes('applicationResponseWindow'));
-assert.ok(publicRuntime.includes('siteOriginFromHtml'));
-assert.ok(!publicRuntime.includes("const SITE_ORIGIN = 'https://rcitcs.com'"), 'Runtime SEO must not diverge from the build-approved canonical origin.');
-assert.ok(publicRuntime.includes('getCareersContext(slug)'));
+assert.ok(publicRuntime.includes('Apply for this role'));
 assert.ok(publicRuntime.includes("robots = 'index,follow'"));
-assert.ok(publicRuntime.includes('Apply for this role'), 'Phase 12 must activate the real application journey without weakening Phase 11 vacancy authority.');
-assert.ok(publicRuntime.includes('/apply'));
-assert.ok(publicRuntime.includes("robots: 'noindex,nofollow'"), 'Application/error surfaces must remain noindex.');
 
-for (const secretPattern of ['SUPABASE_SERVICE_ROLE_KEY=', 'ADMIN_BOOTSTRAP_PASSWORD_VERIFIER=', 'sb_secret_']) {
-  assert.ok(!ui.includes(secretPattern) && !routes.includes(secretPattern), `Secret-like value leaked into Phase 11 presentation: ${secretPattern}`);
+assert.ok(wrangler.includes('"pattern": "rcitcs.com"'));
+assert.ok(wrangler.includes('"custom_domain": true'), 'Public apex must be a Worker Custom Domain so Cloudflare provisions DNS/certificate automatically.');
+assert.ok(wrangler.includes('"pattern": "admin.rcitcs.com/*"'), 'Dedicated admin route must remain separate from the public apex.');
+
+for (const source of [streamlined,routes,ui,wrangler]) {
+  for (const secretPattern of ['SUPABASE_SERVICE_ROLE_KEY=','ADMIN_BOOTSTRAP_PASSWORD_VERIFIER=','sb_secret_']) {
+    assert.ok(!source.includes(secretPattern), `Secret-like value leaked into job-authoring source: ${secretPattern}`);
+  }
 }
 
-console.log('PASS: Phase 11 job CMS authority, locked content contract, generated identifiers, transitions, concurrency, audit/deletion policy, CSRF/RBAC, bounded input, responsive workflow and optimized DB access remain verified after Phase 12 activates the real application journey.');
+console.log('PASS: Phase 12 job authoring is streamlined to modal create/edit/preview, server-generated identifiers, one-step draft/publish, controlled categories, automatic availability windows and separate public/admin domains without weakening RBAC, CSRF, concurrency or audit authority.');

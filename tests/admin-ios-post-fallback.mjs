@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { ADMIN_EDGE_RELEASE, normalizeAdminBrowserPost } from '../worker/admin-only.js';
 
-assert.equal(ADMIN_EDGE_RELEASE, 'phase12-admin-soft-navigation-v1', 'Live admin verification must distinguish the Phase 12 soft-navigation release from stale edge code.');
+assert.equal(ADMIN_EDGE_RELEASE, 'phase12-job-authoring-v1', 'Live admin verification must distinguish the Phase 12 job-authoring/modal release from stale edge code.');
 
 const loginUrl = 'https://admin.rcitcs.com/login';
 const jobUrl = 'https://admin.rcitcs.com/jobs/00000000-0000-4000-8000-000000000001/transition';
@@ -47,10 +47,7 @@ assert.equal((await normalizeAdminBrowserPost(partialSameOriginMetadata)).header
 const csrf = 'csrf-token-value';
 const authenticatedIosPost = new Request(jobUrl, {
   method: 'POST',
-  headers: {
-    ...formHeaders,
-    cookie: `rcitcs_admin_session=session; rcitcs_admin_csrf=${encodeURIComponent(csrf)}`
-  },
+  headers: { ...formHeaders, cookie: `rcitcs_admin_session=session; rcitcs_admin_csrf=${encodeURIComponent(csrf)}` },
   body: `csrf=${encodeURIComponent(csrf)}&action=close`
 });
 const normalizedAuthenticated = await normalizeAdminBrowserPost(authenticatedIosPost);
@@ -58,10 +55,7 @@ assert.equal(normalizedAuthenticated.headers.get('origin'), 'https://admin.rcitc
 
 const mismatchedCsrf = new Request(jobUrl, {
   method: 'POST',
-  headers: {
-    ...formHeaders,
-    cookie: `rcitcs_admin_session=session; rcitcs_admin_csrf=${encodeURIComponent(csrf)}`
-  },
+  headers: { ...formHeaders, cookie: `rcitcs_admin_session=session; rcitcs_admin_csrf=${encodeURIComponent(csrf)}` },
   body: 'csrf=wrong-token&action=close'
 });
 assert.equal((await normalizeAdminBrowserPost(mismatchedCsrf)).headers.get('origin'), null, 'Mismatched authenticated CSRF must remain rejected.');
@@ -69,18 +63,13 @@ assert.equal((await normalizeAdminBrowserPost(mismatchedCsrf)).headers.get('orig
 const recoveryCsrf = 'recovery-csrf-value';
 const resetPost = new Request('https://admin.rcitcs.com/reset-password', {
   method: 'POST',
-  headers: {
-    ...formHeaders,
-    cookie: `rcitcs_admin_recovery=token; rcitcs_admin_recovery_csrf=${encodeURIComponent(recoveryCsrf)}`
-  },
+  headers: { ...formHeaders, cookie: `rcitcs_admin_recovery=token; rcitcs_admin_recovery_csrf=${encodeURIComponent(recoveryCsrf)}` },
   body: `csrf=${encodeURIComponent(recoveryCsrf)}&next=Password123%21&confirm=Password123%21`
 });
 assert.equal((await normalizeAdminBrowserPost(resetPost)).headers.get('origin'), 'https://admin.rcitcs.com', 'Recovery POST uses the existing recovery CSRF cookie as the compatibility authority.');
 
 const foreignHost = new Request('https://example.invalid/login', {
-  method: 'POST',
-  headers: formHeaders,
-  body: 'email=x%40example.invalid&password=x'
+  method: 'POST', headers: formHeaders, body: 'email=x%40example.invalid&password=x'
 });
 assert.equal((await normalizeAdminBrowserPost(foreignHost)).headers.get('origin'), null, 'Compatibility normalization is restricted to dedicated admin hostnames.');
 

@@ -42,47 +42,40 @@ for (const requirement of [
 ]) assert.ok(migration.includes(requirement), `Job identifier/content authority missing: ${requirement}`);
 
 assert.ok(migration.includes("code ~ '^RC-[A-Z0-9]{2,5}-[0-9]{2}-[A-Z0-9]{3}-[A-Z0-9]{6}$'"));
-assert.ok(migration.includes("metadata = metadata || jsonb_build_object('retired_reason', 'draft_deleted')"), 'Deleted identifiers must remain permanently reserved.');
-assert.ok(!/p_payload\s*->>\s*'code'/.test(migration), 'Client payload must not control the immutable job identifier.');
+assert.ok(migration.includes("metadata = metadata || jsonb_build_object('retired_reason', 'draft_deleted')"));
+assert.ok(!/p_payload\s*->>\s*'code'/.test(migration));
 assert.ok(!adminUi.includes('name="code"'), 'Admin form must not expose an editable job-code input.');
 assert.ok(!adminUi.includes('form.get("code")'), 'Admin form parser must not accept a client-supplied job code.');
 assert.ok(adminUi.includes('Generated automatically'));
-assert.ok(adminUi.includes('Server generated · immutable · never reused.'));
-assert.ok(adminUi.includes('Canonical candidate-content preview'));
+assert.ok(adminUi.includes('Server-generated · immutable'));
+assert.ok(adminUi.includes('Candidate-content preview'));
 
 for (const candidateLabel of [
   'Required programming languages / technologies', 'Required skills', 'Preferred skills',
-  'Application response window', 'Industry context', 'Preferred qualifications',
+  'Response time', 'Industry context', 'Preferred qualifications',
   'Nature of working style', 'Location details'
-]) assert.ok(adminUi.includes(candidateLabel), `Admin editor/preview omitted locked candidate field: ${candidateLabel}`);
+]) assert.ok(adminUi.includes(candidateLabel), `Admin editor/preview omitted canonical candidate field: ${candidateLabel}`);
 
 for (const [surface, source] of [['overview', overviewUi], ['jobs', adminUi], ['security', securityUi]]) {
   assert.ok(source.includes('${basePath}/jobs'), `Authenticated ${surface} workspace must expose Jobs navigation.`);
-  assert.ok(source.includes('>Jobs<') || source.includes('<span>Jobs</span>'), `Authenticated ${surface} workspace must label the Jobs destination clearly.`);
+  assert.ok(source.includes('>Jobs<') || source.includes('<span>Jobs</span>'));
 }
-assert.ok(overviewUi.includes('This overview is intentionally read-only'), 'Overview must remain non-mutating after Phase 11 navigation is added.');
-assert.ok(securityUi.includes('Recruitment publishing is managed from the Jobs workspace.'), 'Security surface must keep responsibility boundaries explicit.');
+assert.ok(overviewUi.includes('This overview is intentionally read-only'));
+assert.ok(securityUi.includes('Recruitment publishing is managed from the Jobs workspace.'));
 
-for (const mapping of ['requiredSkills', 'preferredSkills', 'applicationResponseWindow']) {
-  assert.ok(publicRepository.includes(mapping), `Public repository omitted canonical mapping: ${mapping}`);
-}
-for (const label of ['Required skills', 'Preferred skills', 'Application response window', 'Industry context', 'Preferred qualifications', 'Nature of working style']) {
-  assert.ok(publicRuntime.includes(label), `Public candidate renderer omitted canonical field: ${label}`);
-}
-
-assert.ok(publicRuntime.includes("robots = 'index,follow'"), 'Published public job pages must default to crawlable SEO state.');
-assert.ok(publicRuntime.includes("robots: 'noindex,nofollow'"), 'Application/error surfaces must remain noindex.');
-assert.ok(publicRuntime.includes('Apply for this role'), 'Phase 12 may enable application intake only while preserving the Phase 11 canonical vacancy renderer.');
-assert.ok(publicRuntime.includes('/apply'), 'Published jobs must link to the Phase 12 application route once the application workflow is active.');
+for (const mapping of ['requiredSkills', 'preferredSkills', 'applicationResponseWindow']) assert.ok(publicRepository.includes(mapping));
+for (const label of ['Required skills', 'Preferred skills', 'Application response window', 'Industry context', 'Preferred qualifications', 'Nature of working style']) assert.ok(publicRuntime.includes(label));
+assert.ok(publicRuntime.includes("robots = 'index,follow'"));
+assert.ok(publicRuntime.includes("robots: 'noindex,nofollow'"));
+assert.ok(publicRuntime.includes('Apply for this role'));
+assert.ok(publicRuntime.includes('/apply'));
 
 const runtimeNavigationGuard = 'if (selectRole(slug)) event.preventDefault();';
-assert.ok(careerInteractions.includes(runtimeNavigationGuard), 'Runtime-rendered vacancy links must retain native browser navigation when the legacy static selector cannot handle the role.');
-assert.ok(!careerInteractions.includes('event.preventDefault();\n      selectRole(slug);'), 'Legacy Careers JavaScript must not suppress runtime job navigation unconditionally.');
+assert.ok(careerInteractions.includes(runtimeNavigationGuard));
+assert.ok(!careerInteractions.includes('event.preventDefault();\n      selectRole(slug);'));
 
-for (const source of [prerequisite, migration, adminUi, overviewUi, securityUi, publicRepository, publicRuntime, careerInteractions]) {
-  for (const secretPattern of ['ADMIN_BOOTSTRAP_PASSWORD_VERIFIER=', 'SUPABASE_SERVICE_ROLE_KEY=', 'sb_secret_']) {
-    assert.ok(!source.includes(secretPattern), `Secret-like value leaked into Phase 11 convergence source: ${secretPattern}`);
-  }
+for (const source of [prerequisite,migration,adminUi,overviewUi,securityUi,publicRepository,publicRuntime,careerInteractions]) {
+  for (const secretPattern of ['ADMIN_BOOTSTRAP_PASSWORD_VERIFIER=','SUPABASE_SERVICE_ROLE_KEY=','sb_secret_']) assert.ok(!source.includes(secretPattern));
 }
 
-console.log('PASS: Phase 11 clean-schema convergence, server-generated immutable job codes, canonical candidate fields, discoverable admin navigation, shared content authority and runtime-link navigation remain verified after Phase 12 activates the application journey.');
+console.log('PASS: Phase 11 immutable identifiers, canonical content authority, admin navigation and public candidate rendering remain preserved under the streamlined Phase 12 authoring UX.');

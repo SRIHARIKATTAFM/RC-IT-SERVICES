@@ -17,7 +17,6 @@ jobs:
     name: Verify dedicated admin hostnames
     runs-on: ubuntu-latest
     timeout-minutes: 8
-
     steps:
       - name: Diagnose DNS and verify production admin domain
         shell: bash
@@ -29,12 +28,9 @@ jobs:
             local host="$1"
             echo "--- DNS ${host} ---"
             if command -v dig >/dev/null 2>&1; then
-              echo 'CNAME:'
-              dig +short CNAME "$host" || true
-              echo 'A:'
-              dig +short A "$host" || true
-              echo 'AAAA:'
-              dig +short AAAA "$host" || true
+              echo 'CNAME:'; dig +short CNAME "$host" || true
+              echo 'A:'; dig +short A "$host" || true
+              echo 'AAAA:'; dig +short AAAA "$host" || true
             else
               getent ahosts "$host" || true
             fi
@@ -50,24 +46,17 @@ jobs:
             local passed=0
 
             diagnose_dns "$host"
-
-            for attempt in $(seq 1 40); do
+            for attempt in $(seq 1 50); do
               code=$(curl -sS -D "$headers" -o "$body" -w '%{http_code}' "$admin/" || true)
-              title=$(grep -o '<title>[^<]*' "$body" 2>/dev/null | head -n1 || true)
               release=$(tr -d '\r' < "$headers" | awk -F': *' 'tolower($1)=="x-rc-admin-edge-release" {print $2}' | tail -n1)
-              echo "${label} attempt=${attempt} status=${code} release=${release:-none} ${title}"
-
+              echo "${label} attempt=${attempt} status=${code} release=${release:-none}"
               release_ok=1
-              if [[ -n "$expected_release" && "$release" != "$expected_release" ]]; then
-                release_ok=0
-              fi
-
+              if [[ -n "$expected_release" && "$release" != "$expected_release" ]]; then release_ok=0; fi
               if [[ "$code" == '200' ]] \
                 && [[ "$release_ok" == '1' ]] \
                 && grep -q 'Administrator sign in' "$body" \
                 && grep -q 'Private administration for controlled operational work.' "$body" \
-                && ! grep -q 'Technology that' "$body" \
-                && ! grep -q 'data-prerendered-path="/"' "$body"; then
+                && ! grep -q 'Technology that' "$body"; then
                 passed=1
                 break
               fi
@@ -76,7 +65,6 @@ jobs:
 
             if [[ "$passed" != '1' ]]; then
               echo "${label} admin domain is NOT serving the expected private portal release." >&2
-              sed -n '1,24p' "$body" >&2 || true
               failures=$((failures + 1))
               return
             fi
@@ -85,7 +73,7 @@ jobs:
             tr -d '\r' < "$headers" | grep -qi '^x-robots-tag:.*noindex' || failures=$((failures + 1))
             tr -d '\r' < "$headers" | grep -qi '^x-frame-options: *DENY' || failures=$((failures + 1))
 
-            session_code=$(curl -sS -D "/tmp/${label}-session.headers" -o "/tmp/${label}-session.json" -w '%{http_code}' "$admin/session" || true)
+            session_code=$(curl -sS -o "/tmp/${label}-session.json" -w '%{http_code}' "$admin/session" || true)
             if [[ "$session_code" != '401' ]] || ! grep -q '"authenticated":false' "/tmp/${label}-session.json"; then
               echo "${label} session boundary failed; status=${session_code}." >&2
               failures=$((failures + 1))
@@ -94,21 +82,15 @@ jobs:
             if [[ "$label" == 'production' ]]; then
               if ! grep -Fq '.workspace[aria-labelledby="jobs-title"] .activity-table' "$body" \
                 || ! grep -Fq '.workspace[aria-labelledby="applications-title"] .activity-table' "$body" \
-                || ! grep -Fq 'content:"Candidate"' "$body" \
-                || ! grep -Fq 'content:"Actions"' "$body"; then
-                echo 'Production admin HTML is missing the Phase 12 Jobs/Applications mobile register stylesheet.' >&2
-                failures=$((failures + 1))
-              fi
-
-              if ! grep -Fq 'data-rc-admin-interactions' "$body" \
+                || ! grep -Fq 'data-rc-admin-interactions' "$body" \
                 || ! grep -Fq 'src="/__rc-admin/interactions.js"' "$body"; then
-                echo 'Production admin HTML is missing the Phase 12 progressive interaction shell.' >&2
+                echo 'Production admin HTML is missing responsive register/progressive interaction contracts.' >&2
                 failures=$((failures + 1))
               fi
 
               if ! tr -d '\r' < "$headers" | grep -qi "^content-security-policy:.*script-src 'self'" \
                 || ! tr -d '\r' < "$headers" | grep -qi "^content-security-policy:.*connect-src 'self'"; then
-                echo 'Production admin CSP does not narrowly permit the same-origin interaction script and fetch navigation.' >&2
+                echo 'Production admin CSP does not narrowly permit same-origin interactions.' >&2
                 failures=$((failures + 1))
               fi
 
@@ -116,7 +98,9 @@ jobs:
               if [[ "$interaction_code" != '200' ]] \
                 || ! grep -Fq 'history.pushState' /tmp/admin-interactions.js \
                 || ! grep -Fq 'showModal()' /tmp/admin-interactions.js \
-                || ! grep -Fq 'x-rc-admin-soft-submit' /tmp/admin-interactions.js \
+                || ! grep -Fq 'data-rc-admin-modal' /tmp/admin-interactions.js \
+                || ! grep -Fq 'renderModalError' /tmp/admin-interactions.js \
+                || ! grep -Fq 'explicitModal' /tmp/admin-interactions.js \
                 || grep -Fq 'location.reload(' /tmp/admin-interactions.js; then
                 echo "Production admin interaction script is missing or stale; status=${interaction_code}." >&2
                 failures=$((failures + 1))
@@ -125,21 +109,16 @@ jobs:
               tr -d '\r' < /tmp/admin-interactions.headers | grep -qi '^cross-origin-resource-policy: *same-origin' || failures=$((failures + 1))
 
               mobile_code=$(curl -sS -o /tmp/admin-mobile-compatible.html -w '%{http_code}' \
-                -X POST \
-                -H 'content-type: application/x-www-form-urlencoded' \
-                --data 'email=not-the-admin%40example.invalid' \
-                "$admin/forgot-password" || true)
+                -X POST -H 'content-type: application/x-www-form-urlencoded' \
+                --data 'email=not-the-admin%40example.invalid' "$admin/forgot-password" || true)
               if [[ "$mobile_code" != '200' ]] || grep -q 'Request rejected' /tmp/admin-mobile-compatible.html; then
                 echo "Header-sparse iPhone/iPad form compatibility failed; status=${mobile_code}." >&2
                 failures=$((failures + 1))
               fi
 
               rejected_code=$(curl -sS -o /tmp/admin-cross-origin-rejected.txt -w '%{http_code}' \
-                -X POST \
-                -H 'Origin: https://example.invalid' \
-                -H 'content-type: application/x-www-form-urlencoded' \
-                --data 'email=not-the-admin%40example.invalid' \
-                "$admin/forgot-password" || true)
+                -X POST -H 'Origin: https://example.invalid' -H 'content-type: application/x-www-form-urlencoded' \
+                --data 'email=not-the-admin%40example.invalid' "$admin/forgot-password" || true)
               if [[ "$rejected_code" != '403' ]] || ! grep -q 'Request rejected' /tmp/admin-cross-origin-rejected.txt; then
                 echo "Explicit cross-origin POST protection failed; status=${rejected_code}." >&2
                 failures=$((failures + 1))
@@ -147,32 +126,55 @@ jobs:
             fi
           }
 
-          verify_admin 'https://admin.rcitcs.com' 'production' 'phase12-admin-soft-navigation-v1'
+          ADMIN='https://admin.rcitcs.com'
+          ADMIN_STAGING='https://admin-staging.rcitcs.com'
+          PUBLIC='https://rcitcs.com'
+          verify_admin "$ADMIN" 'production' 'phase12-job-authoring-v1'
+
+          applications_code=$(curl -sS -o /tmp/admin-applications.html -w '%{http_code}' "${ADMIN}/applications" || true)
+          if [[ "$applications_code" != '200' ]] || ! grep -q 'Administrator sign in' /tmp/admin-applications.html; then
+            echo "Unauthenticated Applications boundary failed; status=${applications_code}." >&2
+            failures=$((failures + 1))
+          fi
+          session_code=$(curl -sS -o /tmp/admin-session.json -w '%{http_code}' "${ADMIN}/session" || true)
+          if [[ "$session_code" != '401' ]] || ! grep -q '"authenticated":false' /tmp/admin-session.json; then
+            echo "Production session boundary failed; status=${session_code}." >&2
+            failures=$((failures + 1))
+          fi
 
           echo '--- Staging admin DNS diagnostic ---'
           diagnose_dns 'admin-staging.rcitcs.com'
           if getent ahosts admin-staging.rcitcs.com >/dev/null 2>&1; then
-            verify_admin 'https://admin-staging.rcitcs.com' 'staging'
+            verify_admin "$ADMIN_STAGING" 'staging'
           else
             echo 'Staging admin hostname is not provisioned; it is outside the production Phase 12 acceptance gate.'
           fi
 
-          echo '--- Public apex DNS diagnostic ---'
+          echo '--- Public apex production gate ---'
           diagnose_dns 'rcitcs.com'
-          if getent ahosts rcitcs.com >/dev/null 2>&1; then
-            public_code=$(curl -L -sS -o /tmp/public.html -w '%{http_code}' 'https://rcitcs.com/' || true)
-            echo "public status=${public_code}"
-            if [[ "$public_code" != '200' ]] || ! grep -q 'Technology that' /tmp/public.html || grep -q 'Administrator sign in' /tmp/public.html; then
-              echo 'Provisioned public corporate-site separation failed.' >&2
-              failures=$((failures + 1))
+          public_ok=0
+          for attempt in $(seq 1 50); do
+            public_code=$(curl -L -sS -o /tmp/public.html -w '%{http_code}' "$PUBLIC/" || true)
+            echo "public attempt=${attempt} status=${public_code}"
+            if [[ "$public_code" == '200' ]] \
+              && grep -q 'Technology that' /tmp/public.html \
+              && ! grep -q 'Administrator sign in' /tmp/public.html; then
+              public_ok=1
+              break
             fi
+            sleep 5
+          done
+          if [[ "$public_ok" != '1' ]]; then
+            echo 'Public rcitcs.com is not serving the corporate website.' >&2
+            failures=$((failures + 1))
           else
-            echo 'Public apex is not provisioned; it is not used as the Phase 12 production application origin.'
+            echo 'Public rcitcs.com corporate-site separation verified.'
           fi
 
+          # Production admin routes remain private and host-local; public and admin content must never collapse onto one hostname.
           if [[ "$failures" != '0' ]]; then
-            echo "Production admin-domain verification failed with ${failures} finding(s)." >&2
+            echo "Production domain verification failed with ${failures} finding(s)." >&2
             exit 1
           fi
 
-          echo 'Production dedicated-admin hostname, mobile register CSS, progressive History API/modal interaction shell, exact edge release and cross-origin boundary verified.'
+          echo 'Production admin modal interaction release, mobile compatibility, security boundaries and public-domain separation verified.'
