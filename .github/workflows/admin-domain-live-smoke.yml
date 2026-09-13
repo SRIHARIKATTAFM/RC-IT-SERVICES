@@ -131,6 +131,17 @@ jobs:
           PUBLIC='https://rcitcs.com'
           verify_admin "$ADMIN" 'production' 'phase12-job-authoring-v1'
 
+          applications_code=$(curl -sS -o /tmp/admin-applications.html -w '%{http_code}' "${ADMIN}/applications" || true)
+          if [[ "$applications_code" != '200' ]] || ! grep -q 'Administrator sign in' /tmp/admin-applications.html; then
+            echo "Unauthenticated Applications boundary failed; status=${applications_code}." >&2
+            failures=$((failures + 1))
+          fi
+          session_code=$(curl -sS -o /tmp/admin-session.json -w '%{http_code}' "${ADMIN}/session" || true)
+          if [[ "$session_code" != '401' ]] || ! grep -q '"authenticated":false' /tmp/admin-session.json; then
+            echo "Production session boundary failed; status=${session_code}." >&2
+            failures=$((failures + 1))
+          fi
+
           echo '--- Staging admin DNS diagnostic ---'
           diagnose_dns 'admin-staging.rcitcs.com'
           if getent ahosts admin-staging.rcitcs.com >/dev/null 2>&1; then
