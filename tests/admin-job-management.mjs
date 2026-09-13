@@ -77,7 +77,9 @@ assert.ok(ui.includes('data-rc-admin-modal="true"'), 'Create/Edit/Preview action
 assert.ok(ui.includes('Generated automatically'));
 assert.ok(ui.includes('generatedSlug(title)'));
 assert.ok(!ui.includes('name="code"'), 'Job code must remain server-controlled.');
-assert.ok(!ui.includes('URL slug'), 'Administrator must not manually author URL slugs.');
+assert.ok(!ui.includes('id="job-slug"'), 'Administrator must not receive a visible URL-slug editor.');
+assert.ok(!ui.includes('for="job-slug"'), 'Administrator must not receive a visible URL-slug label.');
+assert.ok(ui.includes('type="hidden" name="slug"'), 'Existing canonical slugs must still be preserved during edits.');
 assert.ok(ui.includes('name="no_expiry"'));
 assert.ok(ui.includes('repeat(auto-fit,minmax('));
 
