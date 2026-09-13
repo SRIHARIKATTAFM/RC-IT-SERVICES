@@ -10,7 +10,7 @@ import {
 const ADMIN_HOSTS = new Set(['admin.rcitcs.com', 'admin-staging.rcitcs.com']);
 const BODYLESS_STATUSES = new Set([204, 205, 304]);
 const UNAUTHENTICATED_FORM_PATHS = new Set(['/login', '/forgot-password']);
-export const ADMIN_EDGE_RELEASE = 'phase12-admin-soft-navigation-v1';
+export const ADMIN_EDGE_RELEASE = 'phase12-job-authoring-v1';
 
 function copyResponseHeaders(source) {
   const headers = new Headers(source);
@@ -39,10 +39,8 @@ function headerMatchesOrigin(value, url) {
 function hasExplicitCrossOriginEvidence(request, url) {
   const origin = request.headers.get('origin');
   if (origin && origin !== 'null') return !headerMatchesOrigin(origin, url);
-
   const referer = request.headers.get('referer');
   if (referer) return !headerMatchesOrigin(referer, url);
-
   const site = request.headers.get('sec-fetch-site');
   return site === 'cross-site' || site === 'same-site';
 }
@@ -54,11 +52,8 @@ function parseCookieHeader(request) {
     if (separator <= 0) continue;
     const name = part.slice(0, separator).trim();
     const raw = part.slice(separator + 1).trim();
-    try {
-      cookies.set(name, decodeURIComponent(raw));
-    } catch {
-      cookies.set(name, raw);
-    }
+    try { cookies.set(name, decodeURIComponent(raw)); }
+    catch { cookies.set(name, raw); }
   }
   return cookies;
 }
@@ -71,11 +66,8 @@ function isFormPost(request) {
 async function hasMatchingAdminCsrf(request) {
   if (!isFormPost(request)) return false;
   let form;
-  try {
-    form = await request.clone().formData();
-  } catch {
-    return false;
-  }
+  try { form = await request.clone().formData(); }
+  catch { return false; }
   const submitted = String(form.get('csrf') || '');
   if (!submitted) return false;
   const cookies = parseCookieHeader(request);
@@ -103,13 +95,8 @@ export async function normalizeAdminBrowserPost(request) {
   if (request.method !== 'POST') return request;
   const url = new URL(request.url);
   if (!ADMIN_HOSTS.has(url.hostname.toLowerCase())) return request;
-
   if (hasExplicitCrossOriginEvidence(request, url)) return request;
 
-  // The client interaction layer may submit authenticated admin forms with fetch
-  // so the surrounding register or modal does not tear down. Treat that request
-  // as browser-navigation evidence only after the edge independently proves the
-  // server-issued HttpOnly CSRF cookie matches the submitted form token.
   if (request.headers.get(ADMIN_SOFT_SUBMIT_HEADER) === '1') {
     if (!(await hasMatchingAdminCsrf(request))) return request;
     return withTrustedNavigationEvidence(request, url);
@@ -119,19 +106,9 @@ export async function normalizeAdminBrowserPost(request) {
   if (origin && origin !== 'null') return request;
   const referer = request.headers.get('referer');
   if (referer) return request;
-
-  if (request.headers.get('sec-fetch-site') === 'same-origin') {
-    return withSameOriginEvidence(request, url);
-  }
-
-  if (UNAUTHENTICATED_FORM_PATHS.has(url.pathname) && isFormPost(request)) {
-    return withSameOriginEvidence(request, url);
-  }
-
-  if (await hasMatchingAdminCsrf(request)) {
-    return withSameOriginEvidence(request, url);
-  }
-
+  if (request.headers.get('sec-fetch-site') === 'same-origin') return withSameOriginEvidence(request, url);
+  if (UNAUTHENTICATED_FORM_PATHS.has(url.pathname) && isFormPost(request)) return withSameOriginEvidence(request, url);
+  if (await hasMatchingAdminCsrf(request)) return withSameOriginEvidence(request, url);
   return request;
 }
 
@@ -157,20 +134,13 @@ function allowAdminInteractions(csp = '') {
 
 async function enhanceAdminResponse(response, requestMethod) {
   const contentType = response.headers.get('content-type') || '';
-  if (requestMethod === 'HEAD' || BODYLESS_STATUSES.has(response.status) || !contentType.toLowerCase().includes('text/html')) {
-    return response;
-  }
-
+  if (requestMethod === 'HEAD' || BODYLESS_STATUSES.has(response.status) || !contentType.toLowerCase().includes('text/html')) return response;
   const body = await response.text();
   const enhanced = injectAdminInteractionHtml(injectAdminResponsiveHtml(body));
   const headers = copyResponseHeaders(response.headers);
   headers.set('content-security-policy', allowAdminInteractions(headers.get('content-security-policy') || ''));
   headers.set('x-rc-admin-edge-release', ADMIN_EDGE_RELEASE);
-  return new Response(enhanced, {
-    status: response.status,
-    statusText: response.statusText,
-    headers
-  });
+  return new Response(enhanced, { status: response.status, statusText: response.statusText, headers });
 }
 
 export default {
@@ -178,14 +148,7 @@ export default {
     const url = new URL(request.url);
     const host = url.hostname.toLowerCase();
     if (!ADMIN_HOSTS.has(host)) {
-      return new Response('Not Found', {
-        status: 404,
-        headers: {
-          'cache-control': 'no-store',
-          'x-robots-tag': 'noindex, nofollow',
-          'x-content-type-options': 'nosniff'
-        }
-      });
+      return new Response('Not Found', { status: 404, headers: { 'cache-control':'no-store', 'x-robots-tag':'noindex, nofollow', 'x-content-type-options':'nosniff' } });
     }
     if ((request.method === 'GET' || request.method === 'HEAD') && url.pathname === ADMIN_INTERACTION_PATH) {
       if (request.method === 'HEAD') {
