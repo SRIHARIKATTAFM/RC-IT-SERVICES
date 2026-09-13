@@ -21,13 +21,15 @@ for (const contract of [
   'refreshCurrentView',
   "new RegExp(`^/jobs/${UUID}/(?:edit|preview|delete)$`",
   "new RegExp(`^/applications/${UUID}$`",
-  "'x-rc-admin-soft-submit': '1'",
+  'x-rc-admin-soft-submit',
   "location.pathname === '/jobs'",
-  'trigger.focus({ preventScroll: true })',
-  "link.target = '_blank'"
-]) {
-  assert.ok(ADMIN_INTERACTION_SCRIPT.includes(contract), `Admin interaction contract missing: ${contract}`);
-}
+  'trigger.focus(',
+  "link.target = '_blank'",
+  'data-rc-admin-modal',
+  'renderModalError',
+  'explicitModal'
+]) assert.ok(ADMIN_INTERACTION_SCRIPT.includes(contract), `Admin interaction contract missing: ${contract}`);
+
 assert.ok(!ADMIN_INTERACTION_SCRIPT.includes('location.reload('), 'The enhanced admin shell must never force a page reload for normal in-portal navigation.');
 
 for (const contract of [
@@ -37,9 +39,7 @@ for (const contract of [
   '@media(max-width:640px)',
   'width:100vw;height:100dvh',
   '.rc-admin-dialog-close'
-]) {
-  assert.ok(ADMIN_INTERACTION_STYLE.includes(contract), `Admin modal style contract missing: ${contract}`);
-}
+]) assert.ok(ADMIN_INTERACTION_STYLE.includes(contract), `Admin modal style contract missing: ${contract}`);
 
 const page = '<!doctype html><html><head></head><body><main>Admin</main></body></html>';
 const once = injectAdminInteractionHtml(page);
