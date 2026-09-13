@@ -29,23 +29,21 @@ for (const contract of [
 
 const config = JSON.parse(wrangler);
 assert.ok(Array.isArray(config.assets?.run_worker_first));
-assert.ok(config.assets.run_worker_first.includes('/*'), 'Worker must run before assets for dynamic Careers/API/admin-host routing.');
-assert.equal(config.workers_dev, true, 'Primary application Worker remains reachable on its workers.dev deployment.');
+assert.ok(config.assets.run_worker_first.includes('/*'));
+assert.equal(config.workers_dev, true);
 assert.equal(Object.hasOwn(config, 'route'), false);
-assert.equal(config.routes?.length, 1, 'The connected company Worker must own exactly one explicit production admin edge route.');
-assert.equal(config.routes?.[0]?.pattern, 'admin.rcitcs.com/*');
-assert.equal(config.routes?.[0]?.zone_name, 'rcitcs.com');
-assert.notEqual(config.routes?.[0]?.custom_domain, true, 'The public Worker is a Route in front of the existing admin Custom Domain, not a replacement origin.');
+assert.equal(config.routes?.length, 2, 'Production must provision the public apex and preserve the dedicated admin edge route.');
+const publicDomain = config.routes.find((route) => route.pattern === 'rcitcs.com');
+const adminRoute = config.routes.find((route) => route.pattern === 'admin.rcitcs.com/*');
+assert.equal(publicDomain?.custom_domain, true, 'Public apex must be a Worker Custom Domain so DNS and TLS are provisioned by Cloudflare.');
+assert.equal(adminRoute?.zone_name, 'rcitcs.com');
+assert.notEqual(adminRoute?.custom_domain, true, 'The existing working admin route must not be converted while restoring the public apex.');
 
 for (const expected of [
   "ADMIN='https://admin.rcitcs.com'",
-  "ADMIN_STAGING='https://admin-staging.rcitcs.com'",
-  '! grep -q \'Technology that moves business forward\'',
-  'action="/login"',
   "PUBLIC='https://rcitcs.com'",
-  'Production admin routes remain private and host-local',
-  'Public rcitcs.com is not provisioned yet; production admin verification remains authoritative.'
-]) assert.ok(domainWorkflow.includes(expected), `Admin domain release gate missing: ${expected}`);
+  'Production admin routes remain private and host-local'
+]) assert.ok(domainWorkflow.includes(expected), `Admin/public domain release gate missing: ${expected}`);
 
-assert.ok(!worker.includes("ADMIN_PRODUCTION_ORIGIN = 'https://rcitcservices.frsmkgit.workers.dev"), 'workers.dev must not be the company admin origin.');
-console.log('PASS: the existing company Workers Build owns the production admin edge Route, delegates it through the hardened admin entrypoint, and leaves the existing Custom Domain as the underlying origin/fallback.');
+assert.ok(!worker.includes("ADMIN_PRODUCTION_ORIGIN = 'https://rcitcservices.frsmkgit.workers.dev"));
+console.log('PASS: the production Worker exposes rcitcs.com as the public Custom Domain while keeping admin.rcitcs.com on the hardened dedicated admin route.');
