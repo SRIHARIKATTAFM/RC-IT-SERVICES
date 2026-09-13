@@ -70,8 +70,13 @@ function londonWallTimeToIso(value: string): string {
 function nextDate(date: string): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
   if (!match) throw new Error("End date is invalid.");
-  const next = new Date(Date.UTC(Number(match[1]),Number(match[2])-1,Number(match[3])+1));
-  return `${next.getUTCFullYear()}-${String(next.getUTCMonth()+1).padStart(2,"0")}-${String(next.getUTCDate()).padStart(2,"0")}`;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const selected = new Date(Date.UTC(year,month-1,day));
+  if (selected.getUTCFullYear() !== year || selected.getUTCMonth()+1 !== month || selected.getUTCDate() !== day) throw new Error("End date is not a valid calendar date.");
+  selected.setUTCDate(selected.getUTCDate()+1);
+  return `${selected.getUTCFullYear()}-${String(selected.getUTCMonth()+1).padStart(2,"0")}-${String(selected.getUTCDate()).padStart(2,"0")}`;
 }
 
 function normalizePublicationDates(payload: Record<string,unknown>, errors: string[]): Record<string,unknown> {
