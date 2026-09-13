@@ -187,7 +187,9 @@ function rcAdminInteractionsBootstrap() {
     if (button) button.setAttribute('disabled','disabled'); setBusy(true);
     try {
       const result = await requestHtml(action.href,{ method:'POST', body:formBody(form,submitter), headers:{ 'content-type':'application/x-www-form-urlencoded;charset=UTF-8', 'x-rc-admin-soft-submit':'1' } });
-      const modalResponse = Boolean(result.document.querySelector('#job-editor-title,#job-preview-title,.auth-card'));
+      const knownModalContent = Boolean(result.document.querySelector('#job-editor-title,#job-preview-title,.auth-card'));
+      const modalRouteContent = isModalPath(result.url.pathname) && Boolean(result.document.querySelector('main.workspace,.auth-card,main#main-content'));
+      const modalResponse = knownModalContent || modalRouteContent;
       if (insideModal && modalResponse) { modalDirty = true; renderModalDocument(result.document,result.url,activeTrigger); return; }
       if (insideModal) { modalDirty = false; skipCloseRefresh = true; activeDialog?.close(); await refreshCurrentView({preserveScroll:true}); return; }
       if (isModalPath(result.url.pathname)) { modalDirty = true; renderModalDocument(result.document,result.url,button || form); return; }
