@@ -1,0 +1,29 @@
+name: Admin Mobile Live Diagnostic
+
+on:
+  push:
+    branches:
+      - diagnostic/admin-mobile-live
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify live responsive admin stylesheet
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error -D /tmp/admin.headers -o /tmp/admin.html --max-time 20 'https://admin.rcitcs.com/'
+          grep -Fq 'x-rc-admin-edge-release: phase12-ios-post-fallback-v1' <(tr -d '\r' < /tmp/admin.headers)
+          grep -Fq '.workspace[aria-labelledby="jobs-title"] .activity-table' /tmp/admin.html
+          grep -Fq '.workspace[aria-labelledby="applications-title"] .activity-table' /tmp/admin.html
+          grep -Fq 'content:"Role"' /tmp/admin.html
+          grep -Fq 'content:"Actions"' /tmp/admin.html
+          grep -Fq 'content:"Candidate"' /tmp/admin.html
+          grep -Fq 'content:"Documents"' /tmp/admin.html
+          grep -Fq '@media(max-width:900px)' /tmp/admin.html
+          echo 'PASS: live admin.rcitcs.com serves the Phase 12 mobile/tablet Jobs and Applications register stylesheet.'
