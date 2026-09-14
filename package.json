@@ -18,7 +18,7 @@
     "test:smoke": "node tests/smoke.mjs",
     "test:backend": "node tests/backend-foundation.mjs",
     "test:persistence": "node tests/persistence-storage.mjs && node tests/persistence-storage-hardening.mjs",
-    "test:admin-auth": "node tests/admin-auth-security.mjs",
+    "test:admin-auth": "node tests/admin-auth-security.mjs && node tests/admin-reset-consumption-contract.mjs",
     "test:admin-dashboard": "node tests/admin-dashboard.mjs",
     "test:admin-jobs": "node tests/admin-job-management.mjs && node tests/phase12-job-authoring-final.mjs",
     "test:phase11-content": "node tests/phase11-content-preservation.mjs",
