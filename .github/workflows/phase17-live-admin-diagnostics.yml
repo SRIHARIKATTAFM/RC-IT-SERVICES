@@ -1,0 +1,82 @@
+name: Phase 17 Live Admin Diagnostics
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    name: Capture live admin edge state
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: DNS snapshot
+        shell: bash
+        run: |
+          set -u
+          for host in admin.rcitcs.com admin-staging.rcitcs.com rcitcs.com www.rcitcs.com; do
+            echo "===== DNS ${host} ====="
+            getent ahosts "$host" || true
+            dig +short A "$host" || true
+            dig +short AAAA "$host" || true
+            dig +short CNAME "$host" || true
+          done
+
+      - name: Production admin root snapshot
+        shell: bash
+        run: |
+          set -u
+          code=$(curl -sS --max-time 20 -D /tmp/admin.headers -o /tmp/admin.body -w '%{http_code}' 'https://admin.rcitcs.com/' || true)
+          echo "STATUS=${code}"
+          echo '--- SELECTED HEADERS ---'
+          grep -Ei '^(content-type|cache-control|x-robots-tag|x-frame-options|content-security-policy|strict-transport-security|x-rc-admin-environment|x-rc-admin-edge-release|x-rc-admin-build-surface|x-rc-admin-html-media-fix|cf-ray|server|location):' /tmp/admin.headers || true
+          echo '--- BODY MARKERS ---'
+          grep -Eoi '<!doctype html>|Administrator sign in|Private administration for controlled operational work\.|Administration service unavailable|Request rejected' /tmp/admin.body | head -20 || true
+          echo "BODY_BYTES=$(wc -c </tmp/admin.body 2>/dev/null || echo 0)"
+
+      - name: Production admin session snapshot
+        shell: bash
+        run: |
+          set -u
+          code=$(curl -sS --max-time 20 -D /tmp/session.headers -o /tmp/session.body -w '%{http_code}' 'https://admin.rcitcs.com/session' || true)
+          echo "STATUS=${code}"
+          grep -Ei '^(content-type|cache-control|x-robots-tag|x-rc-admin-environment|cf-ray|server|location):' /tmp/session.headers || true
+          echo '--- BODY ---'
+          head -c 500 /tmp/session.body || true
+          echo
+
+      - name: Production admin hostile-origin snapshot
+        shell: bash
+        run: |
+          set -u
+          code=$(curl -sS --max-time 20 -D /tmp/hostile.headers -o /tmp/hostile.body -w '%{http_code}' -X POST -H 'Origin: https://example.invalid' -H 'content-type: application/x-www-form-urlencoded' --data 'email=x&password=x' 'https://admin.rcitcs.com/login' || true)
+          echo "STATUS=${code}"
+          grep -Ei '^(content-type|cache-control|x-robots-tag|x-rc-admin-environment|cf-ray|server|location|set-cookie):' /tmp/hostile.headers || true
+          echo '--- BODY ---'
+          head -c 500 /tmp/hostile.body || true
+          echo
+
+      - name: Staging snapshot
+        shell: bash
+        run: |
+          set -u
+          code=$(curl -sS --max-time 20 -D /tmp/staging.headers -o /tmp/staging.body -w '%{http_code}' 'https://admin-staging.rcitcs.com/' || true)
+          echo "STATUS=${code}"
+          grep -Ei '^(content-type|cache-control|x-robots-tag|x-rc-admin-environment|x-rc-admin-staging-state|cf-ray|server|location|set-cookie):' /tmp/staging.headers || true
+          echo '--- BODY ---'
+          head -c 500 /tmp/staging.body || true
+          echo
+
+      - name: Public aliases snapshot
+        shell: bash
+        run: |
+          set -u
+          for url in 'https://rcitcs.com/admin' 'https://www.rcitcs.com/careers?phase=17'; do
+            echo "===== ${url} ====="
+            code=$(curl -sS --max-time 20 --max-redirs 0 -D /tmp/alias.headers -o /tmp/alias.body -w '%{http_code}' "$url" || true)
+            echo "STATUS=${code}"
+            grep -Ei '^(location|cache-control|strict-transport-security|cf-ray|server):' /tmp/alias.headers || true
+          done
