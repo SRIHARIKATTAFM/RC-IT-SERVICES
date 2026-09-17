@@ -1,0 +1,150 @@
+name: Phase 20.11 Auth Session RBAC Certification
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase20-11-auth-session-rbac-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PHASE20_10_CERTIFIED_BASELINE: 237b91b7ca0e011ab4688120b8c9f9ba01447bff
+
+jobs:
+  source-and-regression:
+    name: 20.11 Source and inherited security certification
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Verify certified Phase 20.10 baseline remains in ancestry
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(git status --porcelain)"
+          git cat-file -e "${PHASE20_10_CERTIFIED_BASELINE}^{commit}"
+          git merge-base --is-ancestor "${PHASE20_10_CERTIFIED_BASELINE}" HEAD
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - name: Run complete inherited verification
+        run: npm run verify
+      - name: Run dedicated Phase 20.11 certification contract
+        run: node tests/phase20-auth-session-rbac-certification.mjs
+
+  production-security:
+    name: 20.11 Production-safe auth and privilege-boundary acceptance
+    needs: source-and-regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - name: Resolve exact production SHA under test
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == 'pull_request' ]]; then
+            expected='${{ github.event.pull_request.base.sha }}'
+          else
+            expected="${GITHUB_SHA}"
+          fi
+          test -n "$expected"
+          echo "EXPECTED_ADMIN_SHA=${expected}" >> "$GITHUB_ENV"
+
+      - name: Verify exact deployed admin identity and unauthenticated boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          ADMIN='https://admin.rcitcs.com'
+
+          for attempt in $(seq 1 120); do
+            code=$(curl -sS --max-time 20 -D /tmp/admin.headers -o /tmp/admin.html -w '%{http_code}' "${ADMIN}/" || true)
+            deployed_sha=$(awk -F': *' 'tolower($1)=="x-rc-admin-deployment-sha" {gsub(/\r/,"",$2); print tolower($2)}' /tmp/admin.headers 2>/dev/null | tail -n1)
+            environment=$(awk -F': *' 'tolower($1)=="x-rc-admin-environment" {gsub(/\r/,"",$2); print tolower($2)}' /tmp/admin.headers 2>/dev/null | tail -n1)
+            if [[ "$code" == '200' && "$deployed_sha" == "$EXPECTED_ADMIN_SHA" && "$environment" == 'production' ]] && grep -q 'Administrator sign in' /tmp/admin.html; then
+              break
+            fi
+            [[ "$attempt" != '120' ]] || { echo "Admin production did not converge to ${EXPECTED_ADMIN_SHA}; observed ${deployed_sha:-missing}." >&2; exit 1; }
+            sleep 5
+          done
+
+          grep -qi '^cache-control:.*no-store' /tmp/admin.headers
+          grep -qi '^x-robots-tag:.*noindex' /tmp/admin.headers
+          ! grep -qi '^set-cookie:' /tmp/admin.headers
+
+          for route in /jobs /applications /contacts /security /change-password; do
+            code=$(curl -sS --max-time 20 -D /tmp/protected.headers -o /tmp/protected.html -w '%{http_code}' "${ADMIN}${route}")
+            test "$code" = '200'
+            grep -q 'Administrator sign in' /tmp/protected.html
+            grep -qi '^cache-control:.*no-store' /tmp/protected.headers
+            grep -qi '^x-robots-tag:.*noindex' /tmp/protected.headers
+            ! grep -qi '^set-cookie:' /tmp/protected.headers
+          done
+
+          code=$(curl -sS --max-time 20 -D /tmp/session.headers -o /tmp/session.json -w '%{http_code}' "${ADMIN}/session")
+          test "$code" = '401'
+          grep -q '"authenticated":false' /tmp/session.json
+          grep -qi '^cache-control:.*no-store' /tmp/session.headers
+          grep -qi '^x-robots-tag:.*noindex' /tmp/session.headers
+          ! grep -qi '^set-cookie:' /tmp/session.headers
+
+      - name: Verify fail-closed mutation, origin and CSRF-adjacent boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          ADMIN='https://admin.rcitcs.com'
+
+          hostile=$(curl -sS --max-time 20 -D /tmp/hostile.headers -o /tmp/hostile.html -w '%{http_code}' \
+            -X POST \
+            -H 'Origin: https://example.invalid' \
+            -H 'content-type: application/x-www-form-urlencoded' \
+            --data 'email=x&password=x' \
+            "${ADMIN}/login")
+          test "$hostile" = '403'
+          grep -q 'Request rejected' /tmp/hostile.html
+          ! grep -qi '^set-cookie:' /tmp/hostile.headers
+          ! grep -qi '^access-control-allow-origin: *\*' /tmp/hostile.headers
+
+          media=$(curl -sS --max-time 20 -D /tmp/media.headers -o /tmp/media.html -w '%{http_code}' \
+            -X POST \
+            -H 'Origin: https://admin.rcitcs.com' \
+            -H 'content-type: application/json' \
+            --data '{"email":"x"}' \
+            "${ADMIN}/login")
+          test "$media" = '415'
+          grep -q 'Unsupported request' /tmp/media.html
+          ! grep -qi '^set-cookie:' /tmp/media.headers
+
+          unknown=$(curl -sS --max-time 20 -D /tmp/unknown.headers -o /tmp/unknown.html -w '%{http_code}' \
+            -X POST \
+            -H 'content-type: application/x-www-form-urlencoded' \
+            --data 'x=1' \
+            "${ADMIN}/__phase20_11_unknown_mutation__")
+          test "$unknown" = '405'
+          ! grep -qi '^set-cookie:' /tmp/unknown.headers
+
+          protected=$(curl -sS --max-time 20 -D /tmp/protected-post.headers -o /tmp/protected-post.html -w '%{http_code}' \
+            -X POST \
+            -H 'Origin: https://admin.rcitcs.com' \
+            -H 'Sec-Fetch-Site: same-origin' \
+            -H 'Sec-Fetch-Mode: navigate' \
+            -H 'Sec-Fetch-Dest: document' \
+            -H 'Sec-Fetch-User: ?1' \
+            -H 'content-type: application/x-www-form-urlencoded' \
+            --data 'csrf=invalid&intent=draft' \
+            "${ADMIN}/jobs/create")
+          test "$protected" = '200'
+          grep -q 'Administrator sign in' /tmp/protected-post.html
+          ! grep -qi '^set-cookie:' /tmp/protected-post.headers
+
+      - name: Phase 20.11 certification boundary
+        run: echo 'Phase 20.11 production-safe authentication / authorization / session / RBAC acceptance passed.'
