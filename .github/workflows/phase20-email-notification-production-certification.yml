@@ -1,0 +1,86 @@
+name: Phase 20.14 Email Notification Production Certification
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase20-14-email-notification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source:
+    name: 20.14 Source and inherited email certification
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - run: npm run verify
+      - run: node tests/phase20-email-notification-production-certification.mjs
+
+  production-runtime:
+    name: 20.14 Production email runtime and auth acceptance
+    needs: source
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Verify transactional email production health
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://chsizmffzpxcqhaptjeu.supabase.co/functions/v1/transactional-email'
+          code=$(curl -sS -o /tmp/health.json -D /tmp/health.headers -w '%{http_code}' "${BASE}/health")
+          test "$code" = '200'
+          for contract in             '"ok":true'             '"service":"rcitcs-transactional-email"'             '"provider":"resend"'             '"providerConfigured":true'             '"databaseConfigured":true'             '"applicationNotifications":true'             '"contactNotifications":true'             '"contactAdminReplies":true'             '"candidateAdminReplies":true'             '"retryScheduler":true'             '"monitoring":true'; do
+            grep -Fq "$contract" /tmp/health.json
+          done
+          grep -qi '^cache-control:.*no-store' /tmp/health.headers
+          ! grep -Eqi 'RESEND_API_KEY|SUPABASE_SERVICE_ROLE_KEY|sb_secret_|\bre_[A-Za-z0-9_-]{20,}\b' /tmp/health.json
+
+      - name: Verify internal dispatcher monitoring and scheduler reject anonymous callers
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE='https://chsizmffzpxcqhaptjeu.supabase.co/functions/v1/transactional-email'
+          dispatch=$(curl -sS -o /tmp/dispatch.json -w '%{http_code}' -X POST -H 'content-type: application/json' --data '{"emailLogId":"11111111-1111-4111-8111-111111111111"}' "${BASE}/dispatch")
+          test "$dispatch" = '401'
+          grep -Fq '"code":"UNAUTHORIZED"' /tmp/dispatch.json
+
+          monitor=$(curl -sS -o /tmp/monitor.json -w '%{http_code}' -X POST "${BASE}/monitor")
+          test "$monitor" = '401'
+          grep -Fq '"code":"UNAUTHORIZED"' /tmp/monitor.json
+
+          sweep=$(curl -sS -o /tmp/sweep.json -w '%{http_code}' -X POST "${BASE}/sweep")
+          test "$sweep" = '401'
+          grep -Fq '"code":"UNAUTHORIZED"' /tmp/sweep.json
+
+      - name: Verify exact merged public production SHA
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 120); do
+            curl -sS -o /tmp/root.html https://rcitcs.com/
+            if grep -Fq "name=\"rc-deployment-sha\" content=\"${EXPECTED_SHA}\"" /tmp/root.html; then
+              exit 0
+            fi
+            if [[ "$attempt" == '120' ]]; then
+              echo "Exact merged SHA did not reach public production." >&2
+              exit 1
+            fi
+            sleep 5
+          done
