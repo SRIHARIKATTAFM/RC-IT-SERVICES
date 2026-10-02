@@ -19,8 +19,10 @@
 /* Performance: preserve the approved Careers composition while deferring layout
    and paint work for sections that start below the initial viewport. */
 @supports (content-visibility: auto) {
-  .careers-page > .section {
-    content-visibility: auto;
-    contain-intrinsic-block-size: 760px;
+  @media (min-width: 901px) {
+    .careers-page > .section {
+      content-visibility: auto;
+      contain-intrinsic-block-size: 760px;
+    }
   }
 }
