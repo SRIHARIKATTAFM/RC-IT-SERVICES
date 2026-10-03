@@ -63,7 +63,7 @@ async function uploadAttachment(path: string, content: Uint8Array, contentType: 
 async function recordAttachment(payload: Record<string, unknown>): Promise<void> {
   const headers = apiHeaders();
   headers.set("prefer", "resolution=ignore-duplicates,return=minimal");
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/contact_message_attachments`, {
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/contact_message_attachments?on_conflict=storage_path`, {
     method: "POST", headers, body: JSON.stringify(payload)
   });
   if (!response.ok) throw new Error(`Attachment record failed: ${response.status}`);

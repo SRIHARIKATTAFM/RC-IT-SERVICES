@@ -364,7 +364,7 @@ function operationNotice(url: URL): { message: string; error: boolean } {
     invalid_archive: "Resolve, close, or mark the enquiry as spam before archiving it.",
     validation: "The requested contact operation was invalid.",
     note_validation: "Internal notes must contain between 1 and 10,000 characters.",
-    reply_validation: "Reply subject and message are required and must stay within the permitted limits.",
+    reply_validation: "Check the reply text and attachments. You can send up to 5 files, 10 MB each and 20 MB total.",
     invalid_recipient: "The persisted customer email address is not valid for outbound delivery.",
     not_found: "The requested contact enquiry no longer exists.",
     failed: "The requested contact operation could not be completed."
