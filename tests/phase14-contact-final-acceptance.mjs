@@ -17,7 +17,7 @@ const emailContract = await readFile(path.join(root, 'supabase/functions/_shared
 const replyDelivery = await readFile(path.join(root, 'supabase/functions/_shared/contact-reply-email-delivery.js'), 'utf8');
 
 // The admin ingress remains bounded. Phase-14 note/reply payloads fit below this ceiling.
-assert.match(adminIndex, /const limit = path\.startsWith\("\/jobs"\) \? 131072 : 32768/);
+assert.match(adminIndex, /const limit = .*path\.startsWith\("\/jobs"\) \? 131072 : 32768/);
 assert.match(adminIndex, /if \(await requestTooLarge\(request, path\)\)/);
 assert.match(contacts, /const NOTE_MAX = 10000/);
 assert.match(contacts, /const REPLY_BODY_MAX = 10000/);
@@ -78,7 +78,7 @@ assert.match(contacts, /esc\(note\.body \|\| ""\)/);
 assert.match(contacts, /esc\(message\.body_text \|\| ""\)/);
 assert.doesNotMatch(contacts, /event\.metadata/);
 assert.doesNotMatch(contacts, /error_message|last_error/);
-assert.match(contacts, /Raw provider errors and arbitrary metadata are not rendered/);
+assert.match(contacts, /Customer emails and admin replies for this enquiry, newest first/);
 
 // List/detail queries stay bounded and indexed for Phase-14 operating paths.
 assert.match(contacts, /const PAGE_LIMIT = 25/);

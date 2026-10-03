@@ -66,7 +66,8 @@ export function createResendEmailProvider({ apiKey = '', fetchImpl = globalThis.
           subject: envelope.subject,
           html: envelope.html,
           text: envelope.text,
-          ...(envelope.replyTo ? { reply_to: envelope.replyTo } : {})
+          ...(envelope.replyTo ? { reply_to: envelope.replyTo } : {}),
+          ...(Array.isArray(envelope.attachments) && envelope.attachments.length ? { attachments: envelope.attachments } : {})
         };
         let response;
         try {

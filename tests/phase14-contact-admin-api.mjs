@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const migration = await readFile(path.join(root, 'supabase/migrations/20260914030000_phase_14_contact_admin_api.sql'), 'utf8');
+const migration = (await readFile(path.join(root, 'supabase/migrations/20260914030000_phase_14_contact_admin_api.sql'), 'utf8')).replace(/\r\n/g, '\n');
 
 const rpcNames = [
   'get_admin_contact_list',
@@ -33,14 +33,14 @@ assert.match(migration, /\(c\.last_activity_at, c\.id\) < \(p_before_activity, p
 assert.match(migration, /order by c\.last_activity_at desc, c\.id desc/i);
 assert.match(migration, /'has_more'/i);
 assert.match(migration, /'next_cursor'/i);
-const listBlock = migration.match(/create or replace function public\.get_admin_contact_list[\s\S]*?\$\$;\n/i)?.[0] ?? '';
+const listBlock = migration.match(/create or replace function public\.get_admin_contact_list[\s\S]*?\$\$;\r?\n/i)?.[0] ?? '';
 assert.ok(listBlock.length > 0);
 assert.doesNotMatch(listBlock, /'message'\s*,\s*c\.message/i, 'Inbox list must not expose full enquiry message');
 assert.doesNotMatch(listBlock, /'phone'\s*,\s*c\.phone/i, 'Inbox list must not expose phone by default');
 assert.match(listBlock, /v_read_state not in \('all','read','unread'\)/i);
 assert.match(listBlock, /v_archive_state not in \('active','archived','all'\)/i);
 
-const detailBlock = migration.match(/create or replace function public\.get_admin_contact_detail[\s\S]*?\$\$;\n/i)?.[0] ?? '';
+const detailBlock = migration.match(/create or replace function public\.get_admin_contact_detail[\s\S]*?\$\$;\r?\n/i)?.[0] ?? '';
 assert.ok(detailBlock.length > 0);
 for (const field of ['phone', 'message', 'consent', 'metadata']) {
   assert.match(detailBlock, new RegExp(`'${field}'`, 'i'));
@@ -57,7 +57,7 @@ for (const name of ['admin_set_contact_read_state', 'admin_transition_contact_en
   assert.match(block, /'STALE_VERSION'/i, `${name} must reject stale writes`);
 }
 
-const readBlock = migration.match(/create or replace function public\.admin_set_contact_read_state[\s\S]*?\$\$;\n/i)?.[0] ?? '';
+const readBlock = migration.match(/create or replace function public\.admin_set_contact_read_state[\s\S]*?\$\$;\r?\n/i)?.[0] ?? '';
 assert.match(readBlock, /first_read_at = coalesce\(first_read_at, now\(\)\), read_at = now\(\)/i);
 assert.match(readBlock, /set read_at = null/i);
 assert.doesNotMatch(readBlock, /set status\s*=/i);
@@ -66,7 +66,7 @@ assert.match(readBlock, /v_event\s*:=\s*'read'/i);
 assert.match(readBlock, /v_event\s*:=\s*'marked_unread'/i);
 assert.match(readBlock, /'contact_'\s*\|\|\s*v_event/i);
 
-const transitionBlock = migration.match(/create or replace function public\.admin_transition_contact_enquiry[\s\S]*?\$\$;\n/i)?.[0] ?? '';
+const transitionBlock = migration.match(/create or replace function public\.admin_transition_contact_enquiry[\s\S]*?\$\$;\r?\n/i)?.[0] ?? '';
 assert.match(transitionBlock, /v_target not in \('open','in_progress','resolved','closed','spam'\)/i);
 assert.match(transitionBlock, /'INVALID_TRANSITION'/i);
 assert.match(transitionBlock, /v_row\.archived_at is not null/i);
@@ -74,7 +74,7 @@ assert.match(transitionBlock, /resolved_at/i);
 assert.match(transitionBlock, /closed_at/i);
 assert.match(transitionBlock, /contact_status_/i);
 
-const archiveBlock = migration.match(/create or replace function public\.admin_set_contact_archive_state[\s\S]*?\$\$;\n/i)?.[0] ?? '';
+const archiveBlock = migration.match(/create or replace function public\.admin_set_contact_archive_state[\s\S]*?\$\$;\r?\n/i)?.[0] ?? '';
 assert.match(archiveBlock, /status not in \('resolved','closed','spam'\)/i);
 assert.match(archiveBlock, /'INVALID_ARCHIVE_STATE'/i);
 assert.match(archiveBlock, /archived_at = case when p_archive then now\(\) else null end/i);
@@ -82,7 +82,7 @@ assert.match(archiveBlock, /'NO_CHANGE'/i);
 assert.match(archiveBlock, /v_event\s*:=\s*case when p_archive then 'archived' else 'restored' end/i);
 assert.match(archiveBlock, /'contact_'\s*\|\|\s*v_event/i);
 
-const noteBlock = migration.match(/create or replace function public\.admin_add_contact_enquiry_note[\s\S]*?\$\$;\n/i)?.[0] ?? '';
+const noteBlock = migration.match(/create or replace function public\.admin_add_contact_enquiry_note[\s\S]*?\$\$;\r?\n/i)?.[0] ?? '';
 assert.match(noteBlock, /char_length\(v_body\) > 10000/i);
 assert.match(noteBlock, /insert into public\.contact_enquiry_notes/i);
 assert.match(noteBlock, /contact_note_added/i);

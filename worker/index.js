@@ -2,6 +2,7 @@ import runtime from '../src/backend/runtime/worker.js';
 import { createCandidateApplicationGateway } from '../src/backend/providers/candidate-application-gateway.js';
 import { handlePublicMediaRequest, isPublicMediaPath } from '../src/backend/runtime/public-media.js';
 import adminWorker from './admin-only.js';
+import { handleContactEmail } from './contact-inbound.js';
 
 const PUBLIC_PRODUCTION_ORIGIN = 'https://rcitcs.com';
 const PUBLIC_PRODUCTION_HOST = 'rcitcs.com';
@@ -147,6 +148,9 @@ export function legacyAdminRedirect(request) {
 }
 
 export default {
+  email(message, env, ctx) {
+    return handleContactEmail(message, env, ctx);
+  },
   async fetch(request, env, ctx) {
     const httpsRedirect = forceHttps(request);
     if (httpsRedirect) return httpsRedirect;

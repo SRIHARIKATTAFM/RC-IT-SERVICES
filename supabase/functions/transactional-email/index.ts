@@ -151,7 +151,24 @@ async function loadContactReplyMessage(emailLogId: string): Promise<Record<strin
   const data = await rows(
     `contact_enquiry_messages?email_log_id=eq.${encodeURIComponent(emailLogId)}&select=id,enquiry_id,direction,sender_email,recipient_email,reply_to_email,subject,body_text,idempotency_key,email_log_id,created_by_admin_id,created_at&limit=1`
   );
-  return data.length === 1 ? data[0] : null;
+  if (data.length !== 1) return null;
+  const message = data[0];
+  const metadata = await rows(`contact_message_attachments?outbound_message_id=eq.${encodeURIComponent(String(message.id))}&select=storage_path,filename,size_bytes&order=created_at.asc&limit=5`);
+  const attachments: Array<{ filename: string; content: string }> = [];
+  for (const item of metadata) {
+    const path = String(item.storage_path || "");
+    if (!/^outbound\/[0-9a-f-]{36}\/[0-4]$/.test(path) || Number(item.size_bytes) > 10 * 1024 * 1024) throw new Error("Contact reply attachment metadata invalid");
+    const headers = new Headers({ apikey: API_KEY });
+    if (USING_LEGACY_KEY) headers.set("authorization", `Bearer ${LEGACY_SERVICE_ROLE_KEY}`);
+    const file = await fetch(`${SUPABASE_URL}/storage/v1/object/contact-attachments/${path}`, { headers });
+    if (!file.ok) throw new Error("Contact reply attachment unavailable");
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    if (!bytes.length || bytes.length > 10 * 1024 * 1024) throw new Error("Contact reply attachment size invalid");
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+    attachments.push({ filename: String(item.filename || "attachment"), content: btoa(binary) });
+  }
+  return { ...message, attachments };
 }
 
 async function loadCandidateReplyMessage(emailLogId: string): Promise<Record<string, unknown> | null> {
@@ -255,7 +272,18 @@ async function dispatchEmailById(emailLogId: string): Promise<{ ok: boolean; cod
     }
 
     if (templateKey === EMAIL_TEMPLATE_KEYS.CONTACT_ADMIN_REPLY) {
-      const message = await loadContactReplyMessage(String(queue.id ?? ""));
+      let message: Record<string, unknown> | null;
+      try {
+        message = await loadContactReplyMessage(String(queue.id ?? ""));
+      } catch {
+        await markFailed({
+          emailLogId: String(queue.id),
+          errorCode: "CONTACT_ATTACHMENT_UNAVAILABLE",
+          errorMessage: "Contact reply attachment could not be loaded for delivery.",
+          retryAt: new Date(Date.now() + 60_000).toISOString()
+        });
+        return { ok: false, code: "CONTACT_ATTACHMENT_UNAVAILABLE" };
+      }
       if (!message) throw new Error("persisted contact reply message unavailable");
       await dispatchContactReplyEmail({ queue, message, provider, markSent, markFailed });
       return { ok: true };

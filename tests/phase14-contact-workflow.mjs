@@ -77,6 +77,6 @@ assert.match(migration, /insert into public\.contact_enquiry_history/);
 assert.match(migration, /insert into public\.audit_logs/);
 
 // Later explicit reply handling must remain a separate branch and may not alter the legal workflow graph.
-assert.match(contacts, /action === "reply"|admin_queue_contact_enquiry_reply/);
+assert.match(contacts, /action === "reply"|admin_queue_contact_reply_with_attachments/);
 
 console.log('Phase 14.6 read/unread, legal workflow transitions, archive/restore, CSRF, optimistic concurrency, audit and explicit recovery contract passed.');

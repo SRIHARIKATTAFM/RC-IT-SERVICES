@@ -47,7 +47,7 @@ assert.match(contacts, /name="read"/);
 assert.match(contacts, /name="archive"/);
 
 // Exact route matching prevents new mutation handlers from changing the GET inbox contract.
-assert.match(contacts, /path !== "\/contacts" && !detailMatch && !mutationMatch/);
+assert.match(contacts, /path !== "\/contacts" && !liveScript && !detailMatch && !attachmentMatch && !mutationMatch/);
 assert.match(contacts, /if \(request\.method === "GET"\)/);
 assert.match(contacts, /const filters = normalizeFilters\(url\)/);
 assert.match(contacts, /inboxPage\(basePath, authState, await contactList\(adminId, filters\), filters\)/);

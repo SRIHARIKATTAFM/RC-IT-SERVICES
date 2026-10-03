@@ -47,7 +47,7 @@ assert.match(contacts, /esc\(message\.body_text \|\| ""\)/);
 assert.match(contacts, /white-space:pre-wrap/);
 assert.doesNotMatch(contacts, /event\.metadata/);
 assert.doesNotMatch(contacts, /error_message|last_error/);
-assert.match(contacts, /Raw provider errors and arbitrary metadata are not rendered/);
+assert.match(contacts, /Customer emails and admin replies for this enquiry, newest first/);
 
 // Original customer evidence is still separate and immutable.
 assert.match(contacts, /Accepted customer-submitted evidence is immutable after intake/);

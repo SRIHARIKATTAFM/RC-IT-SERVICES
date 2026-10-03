@@ -50,7 +50,7 @@ assert.match(migration, /grant execute on function public\.admin_add_contact_enq
 
 // Notes remain isolated from the later customer-reply path.
 assert.match(contacts, /admin_add_contact_enquiry_note/);
-assert.match(contacts, /admin_queue_contact_enquiry_reply/);
+assert.match(contacts, /admin_queue_contact_reply_with_attachments/);
 assert.doesNotMatch(migration, /contact_note_added[^;]*body/s);
 
 console.log('Phase 14.7 internal administrative notes, append-only persistence, escaping, CSRF/version locking, archive restrictions and no-email boundary passed.');

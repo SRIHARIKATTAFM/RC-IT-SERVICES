@@ -14,7 +14,7 @@ assert.match(migration, /create or replace function public\.get_admin_contact_de
 
 assert.match(contacts, /const detailMatch = path\.match/);
 assert.match(contacts, /\[0-9a-f\]\{8\}/i);
-assert.match(contacts, /path !== "\/contacts" && !detailMatch && !mutationMatch/);
+assert.match(contacts, /path !== "\/contacts" && !liveScript && !detailMatch && !attachmentMatch && !mutationMatch/);
 assert.match(contacts, /if \(request\.method === "GET"\)/);
 assert.match(contacts, /const enquiryId = detailMatch\[1\]\.toLowerCase\(\)/);
 assert.match(contacts, /return contactDetailPage\(basePath, authState, context, url\)/);

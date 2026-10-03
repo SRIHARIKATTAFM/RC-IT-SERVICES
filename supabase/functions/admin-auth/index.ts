@@ -197,7 +197,7 @@ async function recovery(request: Request): Promise<any | null> {
 
 async function requestTooLarge(request: Request, path: string): Promise<boolean> {
   if (request.method !== "POST") return false;
-  const limit = path.startsWith("/jobs") ? 131072 : 32768;
+  const limit = /^\/contacts\/[0-9a-f-]{36}\/reply$/i.test(path) ? 21 * 1024 * 1024 : path.startsWith("/jobs") ? 131072 : 32768;
   const contentLength = request.headers.get("content-length");
   if (contentLength !== null) {
     const declared = Number(contentLength);

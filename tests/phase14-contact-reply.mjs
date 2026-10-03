@@ -24,7 +24,7 @@ assert.match(contacts, /maxlength="\$\{REPLY_BODY_MAX\}"/);
 assert.match(contacts, /Send reply/);
 assert.match(contacts, /await csrfOk\(authState/);
 assert.match(contacts, /p_expected_version: version/);
-assert.match(contacts, /admin_queue_contact_enquiry_reply/);
+assert.match(contacts, /admin_queue_contact_reply_with_attachments/);
 assert.match(contacts, /p_subject: subject, p_body: body/);
 assert.match(contacts, /reply_validation/);
 assert.match(contacts, /INVALID_RECIPIENT/);

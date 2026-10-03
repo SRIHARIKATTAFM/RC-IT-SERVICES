@@ -55,7 +55,11 @@ export function buildContactReplyEnvelope(queue, message) {
   if (text(queue.subject) !== envelope.subject) throw new TypeError('Contact reply subject does not match the persisted message.');
   if (text(queue.idempotency_key) !== envelope.idempotencyKey) throw new TypeError('Contact reply idempotency key does not match the persisted message.');
   if (text(message.idempotency_key) !== envelope.idempotencyKey) throw new TypeError('Persisted contact reply idempotency key is invalid.');
-  return envelope;
+  const attachments = Array.isArray(message.attachments) ? message.attachments : [];
+  if (attachments.length > 5 || attachments.some((item) => !item || typeof item.filename !== 'string' || typeof item.content !== 'string')) {
+    throw new TypeError('Persisted contact reply attachments are invalid.');
+  }
+  return attachments.length ? { ...envelope, attachments } : envelope;
 }
 
 export async function dispatchContactReplyEmail({ queue, message, provider, markSent, markFailed } = {}) {

@@ -7,6 +7,10 @@ const PAGE_LIMIT = 25;
 const NOTE_MAX = 10000;
 const REPLY_SUBJECT_MAX = 300;
 const REPLY_BODY_MAX = 10000;
+const MAX_ATTACHMENTS = 5;
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const MAX_REPLY_ATTACHMENTS_BYTES = 20 * 1024 * 1024;
+const ATTACHMENT_BUCKET = "contact-attachments";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CONTACT_STATUSES = new Set(["all", "new", "open", "in_progress", "resolved", "closed", "spam"]);
 const READ_FILTERS = new Set(["all", "unread", "read"]);
@@ -106,6 +110,8 @@ type ContactDetailContext = {
   history_count?: number;
   note_count?: number;
   message_count?: number;
+  inbound?: Array<{ id?: string; sender_email?: string; recipient_email?: string; subject?: string; body_text?: string; received_at?: string }>;
+  attachments?: Array<{ id?: string; inbound_message_id?: string | null; outbound_message_id?: string | null; filename?: string; content_type?: string; size_bytes?: number }>;
 };
 
 type InboxFilters = {
@@ -152,7 +158,48 @@ async function contactList(adminId: string, filters: InboxFilters): Promise<Cont
 
 async function contactDetail(adminId: string, enquiryId: string): Promise<ContactDetailContext> {
   const result = await rpc("get_admin_contact_detail", { p_admin_id: adminId, p_enquiry_id: enquiryId });
+  if (result?.ok === true) {
+    const conversation = await rpc("get_admin_contact_conversation", { p_admin_id: adminId, p_enquiry_id: enquiryId });
+    if (conversation?.ok !== true) throw new Error("contact conversation unavailable");
+    result.inbound = conversation.inbound || [];
+    result.attachments = conversation.attachments || [];
+  }
   return result || { ok: false, code: "UNAVAILABLE" };
+}
+
+function safeFilename(value: unknown): string {
+  return String(value || "attachment").replace(/[^\x20-\x7e]|[\\/"]/g, "_").trim().slice(0, 255) || "attachment";
+}
+
+async function uploadReplyAttachments(files: File[]): Promise<Array<Record<string, unknown>>> {
+  const uploadId = crypto.randomUUID();
+  const uploaded: Array<Record<string, unknown>> = [];
+  try {
+    for (let index = 0; index < files.length; index += 1) {
+      const file = files[index];
+      const path = `outbound/${uploadId}/${index}`;
+      const contentType = String(file.type || "application/octet-stream").slice(0, 150);
+      const headers = apiHeaders();
+      headers.set("content-type", contentType);
+      headers.set("x-upsert", "false");
+      const response = await fetch(`${SUPABASE_URL}/storage/v1/object/${ATTACHMENT_BUCKET}/${path}`, {
+        method: "POST", headers, body: await file.arrayBuffer()
+      });
+      if (!response.ok) throw new Error("contact attachment upload failed");
+      uploaded.push({ storage_path: path, filename: safeFilename(file.name), content_type: contentType, size_bytes: file.size });
+    }
+    return uploaded;
+  } catch (error) {
+    await cleanupReplyAttachments(uploaded);
+    throw error;
+  }
+}
+
+async function cleanupReplyAttachments(attachments: Array<Record<string, unknown>>): Promise<void> {
+  await Promise.allSettled(attachments.map((attachment) => fetch(
+    `${SUPABASE_URL}/storage/v1/object/${ATTACHMENT_BUCKET}/${String(attachment.storage_path || "")}`,
+    { method: "DELETE", headers: apiHeaders() }
+  )));
 }
 
 async function csrfOk(state: any, submitted: string): Promise<boolean> {
@@ -283,7 +330,10 @@ function inboxPage(basePath: string, session: AdminSessionView, context: Contact
     ? `<a class="btn secondary" rel="next" href="${basePath}/contacts${queryString(filters, true, context.next_cursor)}">Next page</a>` : "";
   const resetLink = filters.q || filters.status !== "all" || filters.read !== "all" || filters.archive !== "active"
     ? `<a class="btn secondary" href="${basePath}/contacts">Reset</a>` : "";
-  return shell("Contact enquiries", `<div class="admin-shell">${adminHeader(basePath, session, "contacts")}${workspaceBar("Contact enquiries")}<main class="workspace" id="main-content" aria-labelledby="contacts-title"><div class="page-heading"><div><div class="eyebrow">Customer enquiries</div><h1 id="contacts-title">Contact inbox</h1><p>Server-authoritative register of enquiries accepted through RC IT Services public contact channels. Open a record to inspect the immutable intake and operational context.</p></div><div class="snapshot"><strong>${items.length} on this page</strong>Maximum ${PAGE_LIMIT} per request<br>Keyset pagination</div></div><section class="data-plane" aria-labelledby="contact-register-title"><header class="section-header"><div><h2 id="contact-register-title">Enquiry register</h2><p>Search and filter the private operational view without exposing message bodies or phone numbers in the list.</p></div><span class="section-meta">Operational register</span></header><div style="padding:14px 18px;border-bottom:1px solid var(--line)"><form method="get" action="${basePath}/contacts" style="display:grid;grid-template-columns:minmax(220px,1.3fr) repeat(3,minmax(130px,.45fr)) auto;gap:8px;align-items:end"><div><label for="contact-search" style="display:block;font-size:10px;font-weight:700;margin-bottom:5px">Search</label><input id="contact-search" name="q" value="${esc(filters.q)}" maxlength="200" placeholder="Name, email, company, service or subject" style="width:100%;min-height:38px;border:1px solid var(--line-strong);border-radius:3px;padding:8px 10px"></div><div><label for="contact-status" style="display:block;font-size:10px;font-weight:700;margin-bottom:5px">Status</label><select id="contact-status" name="status" style="width:100%;min-height:38px;border:1px solid var(--line-strong);border-radius:3px;padding:8px 10px;background:#fff">${option("all","All statuses",filters.status)}${option("new","New",filters.status)}${option("open","Open",filters.status)}${option("in_progress","In progress",filters.status)}${option("resolved","Resolved",filters.status)}${option("closed","Closed",filters.status)}${option("spam","Spam",filters.status)}</select></div><div><label for="contact-read" style="display:block;font-size:10px;font-weight:700;margin-bottom:5px">Read state</label><select id="contact-read" name="read" style="width:100%;min-height:38px;border:1px solid var(--line-strong);border-radius:3px;padding:8px 10px;background:#fff">${option("all","All",filters.read)}${option("unread","Unread",filters.read)}${option("read","Read",filters.read)}</select></div><div><label for="contact-archive" style="display:block;font-size:10px;font-weight:700;margin-bottom:5px">Archive</label><select id="contact-archive" name="archive" style="width:100%;min-height:38px;border:1px solid var(--line-strong);border-radius:3px;padding:8px 10px;background:#fff">${option("active","Active",filters.archive)}${option("archived","Archived",filters.archive)}${option("all","All",filters.archive)}</select></div><div class="actions" style="margin:0;gap:6px"><button class="btn secondary" type="submit">Apply</button>${resetLink}</div></form></div><div class="activity-wrap"><table class="activity-table" style="min-width:1080px;table-layout:auto"><thead><tr><th scope="col">Contact</th><th scope="col">Organisation / service</th><th scope="col">Subject</th><th scope="col">Status</th><th scope="col" style="text-align:right">Last activity</th><th scope="col" style="text-align:right">Record</th></tr></thead><tbody>${rows}</tbody></table></div><div style="display:flex;justify-content:space-between;gap:12px;align-items:center;padding:14px 18px;border-top:1px solid var(--line)"><span class="muted">Newest activity first · customer message and phone remain detail-only fields</span><div class="actions" style="margin:0">${nextLink}</div></div></section><div class="footerline"><span>RC IT Services · Private contact operations</span><span>No-cache · No-index · Server-authoritative</span></div></main><style>@media(max-width:900px){form[action$="/contacts"]{grid-template-columns:1fr 1fr!important}}@media(max-width:600px){form[action$="/contacts"]{grid-template-columns:1fr!important}.activity-table{min-width:900px}}</style></div>`);
+  return shell("Contact enquiries", `<div class="admin-shell">${adminHeader(basePath, session, "contacts")}${workspaceBar("Contact enquiries")}<main class="workspace" id="main-content" aria-labelledby="contacts-title"><div class="page-heading"><div><div class="eyebrow">Customer enquiries</div><h1 id="contacts-title">Contact inbox</h1><p>Server-authoritative register of enquiries accepted through RC IT Services public contact channels. Open a record to inspect the immutable intake and operational context.</p></div><div class="snapshot"><strong>${items.length} on this page</strong>Maximum ${PAGE_LIMIT} per request<br>Keyset pagination</div></div><section class="data-plane" aria-labelledby="contact-register-title"><header class="section-header"><div><h2 id="contact-register-title">Enquiry register</h2><p>Search and filter the private operational view without exposing message bodies or phone numbers in the list.</p></div><span class="section-meta">Operational register</span></header><div style="padding:14px 18px;border-bottom:1px solid var(--line)"><form method="get" action="${basePath}/contacts" style="display:grid;grid-template-columns:minmax(220px,1.3fr) repeat(3,minmax(130px,.45fr)) auto;gap:8px;align-items:end"><div><label for="contact-search" style="display:block;font-size:10px;font-weight:700;margin-bottom:5px">Search</label><input id="contact-search" name="q" value="${esc(filters.q)}" maxlength="200" placeholder="Name, email, company, service or subject" style="width:100%;min-height:38px;border:1px solid var(--line-strong);border-radius:3px;padding:8px 10px"></div><div><label for="contact-status" style="display:block;font-size:10px;font-weight:700;margin-bottom:5px">Status</label><select id="contact-status" name="status" style="width:100%;min-height:38px;border:1px solid var(--line-strong);border-radius:3px;padding:8px 10px;background:#fff">${option("all","All statuses",filters.status)}${option("new","New",filters.status)}${option("open","Open",filters.status)}${option("in_progress","In progress",filters.status)}${option("resolved","Resolved",filters.status)}${option("closed","Closed",filters.status)}${option("spam","Spam",filters.status)}</select></div><div><label for="contact-read" style="display:block;font-size:10px;font-weight:700;margin-bottom:5px">Read state</label><select id="contact-read" name="read" style="width:100%;min-height:38px;border:1px solid var(--line-strong);border-radius:3px;padding:8px 10px;background:#fff">${option("all","All",filters.read)}${option("unread","Unread",filters.read)}${option("read","Read",filters.read)}</select></div><div><label for="contact-archive" style="display:block;font-size:10px;font-weight:700;margin-bottom:5px">Archive</label><select id="contact-archive" name="archive" style="width:100%;min-height:38px;border:1px solid var(--line-strong);border-radius:3px;padding:8px 10px;background:#fff">${option("active","Active",filters.archive)}${option("archived","Archived",filters.archive)}${option("all","All",filters.archive)}</select></div><div class="actions" style="margin:0;gap:6px"><button class="btn secondary" type="submit">Apply</button>${resetLink}</div></form></div><div class="activity-wrap"><table class="activity-table" style="min-width:1080px;table-layout:auto"><thead><tr><th scope="col">Contact</th><th scope="col">Organisation / service</th><th scope="col">Subject</th><th scope="col">Status</th><th scope="col" style="text-align:right">Last activity</th><th scope="col" style="text-align:right">Record</th></tr></thead><tbody>${rows}</tbody></table></div><div style="display:flex;justify-content:space-between;gap:12px;align-items:center;padding:14px 18px;border-top:1px solid var(--line)"><span class="muted">Newest activity first · customer message and phone remain detail-only fields</span><div class="actions" style="margin:0">${nextLink}</div></div></section><div class="footerline"><span>RC IT Services · Private contact operations</span><span>No-cache · No-index · Server-authoritative</span></div></main><style>@media(max-width:900px){form[action$="/contacts"]{grid-template-columns:1fr 1fr!important}}@media(max-width:600px){form[action$="/contacts"]{grid-template-columns:1fr!important}.activity-table{min-width:900px}}</style><script src="${basePath}/contacts/live.js" defer></script></div>`);
+  const headers = new Headers(page.headers);
+  headers.set("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
+  return new Response(page.body, { status: page.status, headers });
 }
 
 function workflowTargets(status: string): string[] {
@@ -365,7 +415,7 @@ function contactReplyComposer(basePath: string, session: AdminSessionView, enqui
   if (enquiry.archived_at) {
     return `<section class="data-plane" aria-labelledby="contact-reply-title" style="margin-top:14px"><header class="section-header"><div><h2 id="contact-reply-title">Customer reply</h2><p>Restore this enquiry before replying to the customer.</p></div><span class="section-meta">Disabled while archived</span></header></section>`;
   }
-  return `<section class="data-plane" aria-labelledby="contact-reply-title" style="margin-top:14px"><header class="section-header"><div><h2 id="contact-reply-title">Reply to customer</h2><p>Send from the approved company identity. The reply is persisted before delivery and remains traceable through the transactional email queue.</p></div><span class="section-meta">contact@rcitcs.com</span></header><div style="padding:18px"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:10px;margin-bottom:16px">${fact("To", enquiry.email || "—", true)}${fact("From", "contact@rcitcs.com", true)}${fact("Reply-To", "contact@rcitcs.com", true)}</div><form method="post" action="${basePath}/contacts/${esc(id)}/reply"><input type="hidden" name="csrf" value="${esc(session.csrf)}"><input type="hidden" name="expected_version" value="${esc(version)}"><div class="field"><label for="contact-reply-subject">Subject</label><input id="contact-reply-subject" name="subject" value="${esc(replySubject(enquiry))}" maxlength="${REPLY_SUBJECT_MAX}" required style="display:block;width:100%;box-sizing:border-box"></div><div class="field"><label for="contact-reply-body">Message</label><textarea id="contact-reply-body" name="body" maxlength="${REPLY_BODY_MAX}" rows="8" required placeholder="Write the customer-facing response." style="display:block;width:100%;min-height:180px;box-sizing:border-box;resize:vertical"></textarea><p class="muted">Customer-facing message. Do not include passwords, private candidate documents, internal notes, or secrets.</p></div><button class="btn" type="submit">Send reply</button></form></div></section>`;
+  return `<section class="data-plane" aria-labelledby="contact-reply-title" style="margin-top:14px"><header class="section-header"><div><h2 id="contact-reply-title">Reply to customer</h2><p>Send from the approved company identity. The reply and files are saved in this conversation.</p></div><span class="section-meta">contact@rcitcs.com</span></header><div style="padding:18px"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:10px;margin-bottom:16px">${fact("To", enquiry.email || "—", true)}${fact("From", "contact@rcitcs.com", true)}${fact("Reply-To", "contact@rcitcs.com", true)}</div><form method="post" enctype="multipart/form-data" action="${basePath}/contacts/${esc(id)}/reply"><input type="hidden" name="csrf" value="${esc(session.csrf)}"><input type="hidden" name="expected_version" value="${esc(version)}"><div class="field"><label for="contact-reply-subject">Subject</label><input id="contact-reply-subject" name="subject" value="${esc(replySubject(enquiry))}" maxlength="${REPLY_SUBJECT_MAX}" required style="display:block;width:100%;box-sizing:border-box"></div><div class="field"><label for="contact-reply-body">Message</label><textarea id="contact-reply-body" name="body" maxlength="${REPLY_BODY_MAX}" rows="8" required placeholder="Write the customer-facing response." style="display:block;width:100%;min-height:180px;box-sizing:border-box;resize:vertical"></textarea><p class="muted">Customer-facing message. Do not include passwords, private candidate documents, internal notes, or secrets.</p></div><div class="field"><label for="contact-reply-files">Attach files</label><input id="contact-reply-files" name="attachments" type="file" multiple style="display:block;width:100%"><p class="muted">Up to 5 files, 10 MB each and 20 MB total. Documents, PDFs, images and audio are supported.</p></div><button class="btn" type="submit">Send reply</button></form></div></section>`;
 }
 
 function timelineEventLabel(event: ContactHistoryEvent): string {
@@ -383,10 +433,16 @@ function timelineEventLabel(event: ContactHistoryEvent): string {
   return labels[String(event.event_type || "")] || statusLabel(String(event.event_type || "activity"));
 }
 
-function contactActivityTimeline(context: ContactDetailContext): string {
+function contactActivityTimeline(context: ContactDetailContext, basePath: string, enquiryId: string): string {
   const history = Array.isArray(context.history) ? context.history : [];
   const messages = Array.isArray(context.messages) ? context.messages : [];
+  const inbound = Array.isArray(context.inbound) ? context.inbound : [];
+  const attachments = Array.isArray(context.attachments) ? context.attachments : [];
   const activities: { at: string; html: string }[] = [];
+  const fileLinks = (direction: "inbound" | "outbound", messageId: string): string => {
+    const items = attachments.filter((item) => item[direction === "inbound" ? "inbound_message_id" : "outbound_message_id"] === messageId && UUID.test(String(item.id || "")));
+    return items.length ? `<div style="margin-top:9px;font-size:12px"><strong>Attachments:</strong> ${items.map((item) => `<a class="btn secondary" style="margin:4px;padding:5px 8px" href="${basePath}/contacts/${esc(enquiryId)}/attachments/${esc(item.id)}">${esc(item.filename || "Download file")}</a>`).join(" ")}</div>` : "";
+  };
 
   for (const event of history) {
     if (event.event_type === "reply_queued") continue;
@@ -400,12 +456,16 @@ function contactActivityTimeline(context: ContactDetailContext): string {
   for (const message of messages) {
     const at = String(message.created_at || "");
     const delivery = statusLabel(String(message.delivery_status || "queued"));
-    activities.push({ at, html: `<article style="padding:16px 0;border-top:1px solid var(--line)"><div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline"><strong style="font-size:11px">Outbound customer reply</strong><time class="muted" datetime="${esc(at)}">${esc(prettyTime(at))}</time></div><div class="activity-type">${esc(message.sender_email || "contact@rcitcs.com")} → ${esc(message.recipient_email || "")}</div><div style="margin-top:8px;font-weight:700;font-size:12px">${esc(message.subject || "Reply")}</div><div style="margin-top:7px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.65">${esc(message.body_text || "")}</div><div style="margin-top:8px;font-size:10px;color:var(--muted);font-weight:700">Delivery: ${esc(delivery)}${message.sent_at ? ` · Sent ${esc(prettyTime(String(message.sent_at)))}` : ""}</div></article>` });
+    activities.push({ at, html: `<article style="padding:16px 0;border-top:1px solid var(--line)"><div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline"><strong style="font-size:11px">Outbound customer reply</strong><time class="muted" datetime="${esc(at)}">${esc(prettyTime(at))}</time></div><div class="activity-type">${esc(message.sender_email || "contact@rcitcs.com")} → ${esc(message.recipient_email || "")}</div><div style="margin-top:8px;font-weight:700;font-size:12px">${esc(message.subject || "Reply")}</div><div style="margin-top:7px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.65">${esc(message.body_text || "")}</div>${fileLinks("outbound", String(message.id || ""))}<div style="margin-top:8px;font-size:10px;color:var(--muted);font-weight:700">Delivery: ${esc(delivery)}${message.sent_at ? ` · Sent ${esc(prettyTime(String(message.sent_at)))}` : ""}</div></article>` });
+  }
+  for (const message of inbound) {
+    const at = String(message.received_at || "");
+    activities.push({ at, html: `<article style="padding:16px 0;border-top:1px solid var(--line)"><div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline"><strong style="font-size:11px">Customer email received</strong><time class="muted" datetime="${esc(at)}">${esc(prettyTime(at))}</time></div><div class="activity-type">${esc(message.sender_email || "")} → ${esc(message.recipient_email || "contact@rcitcs.com")}</div><div style="margin-top:8px;font-weight:700;font-size:12px">${esc(message.subject || "Reply")}</div><div style="margin-top:7px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.65">${esc(message.body_text || "")}</div>${fileLinks("inbound", String(message.id || ""))}</article>` });
   }
 
   activities.sort((a, b) => Date.parse(b.at || "1970-01-01") - Date.parse(a.at || "1970-01-01"));
   const body = activities.length ? activities.map((item) => item.html).join("") : `<div class="empty">No operational activity has been recorded yet.</div>`;
-  return `<section class="data-plane" aria-labelledby="contact-activity-title" style="margin-top:14px"><header class="section-header"><div><h2 id="contact-activity-title">Activity &amp; reply history</h2><p>Bounded operational history and persisted outbound customer communication. Raw provider errors and arbitrary metadata are not rendered.</p></div><span class="section-meta">Newest first</span></header><div style="padding:18px">${body}</div></section>`;
+  return `<section class="data-plane" id="contact-activity" aria-labelledby="contact-activity-title" style="margin-top:14px"><header class="section-header"><div><h2 id="contact-activity-title">Activity &amp; reply history</h2><p>Customer emails and admin replies for this enquiry, newest first.</p></div><span class="section-meta">Newest first</span></header><div style="padding:18px">${body}</div></section>`;
 }
 
 function contactDetailPage(basePath: string, session: AdminSessionView, context: ContactDetailContext, url: URL): Response {
@@ -420,7 +480,10 @@ function contactDetailPage(basePath: string, session: AdminSessionView, context:
   const counts = { history: Number(context.history_count || 0), notes: Number(context.note_count || 0), messages: Number(context.message_count || 0) };
   const notice = operationNotice(url);
   const noticeHtml = notice.message ? `<div class="msg ${notice.error ? "error" : "ok"}" role="status">${esc(notice.message)}</div>` : "";
-  return shell("Contact enquiry", `<div class="admin-shell">${adminHeader(basePath, session, "contacts")}${workspaceBar("Enquiry detail", "Immutable intake · operational context")}<main class="workspace" id="main-content" aria-labelledby="contact-detail-title"><div class="page-heading"><div><div class="eyebrow">Contact record</div><h1 id="contact-detail-title">${esc(enquiry.name || "Contact enquiry")}</h1><p>${esc(enquiry.subject || "General enquiry")}</p></div><div class="snapshot"><strong>${statusBadge(String(enquiry.status || "new"))}</strong>${esc(readState)} · ${esc(archiveState)}<br>${esc(assignmentState)} · Version ${esc(version)}</div></div>${noticeHtml}<div class="actions" style="margin:0 0 14px"><a class="btn secondary" href="${basePath}/contacts">Back to contact inbox</a></div><section class="data-plane" aria-labelledby="original-enquiry-title"><header class="section-header"><div><h2 id="original-enquiry-title">Original enquiry</h2><p>Accepted customer-submitted evidence is immutable after intake.</p></div><span class="section-meta">Read-only evidence</span></header><div style="padding:18px"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:10px;margin-bottom:16px">${fact("Name", enquiry.name)}${fact("Email", enquiry.email)}${fact("Phone", enquiry.phone || "—")}${fact("Company", enquiry.company || "—")}${fact("Service / topic", enquiry.service || "—")}${fact("Source", source)}${fact("Privacy consent", consentState)}${dateFact("Consent recorded", enquiry.consent_at)}</div><div style="padding:16px;border:1px solid var(--line);background:var(--surface-subtle)"><span style="display:block;color:var(--muted);font-size:9px;font-weight:750;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Customer message</span><div style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.7;color:var(--text)">${esc(message || "No message content was stored.")}</div></div></div></section>${detailOperationalMetadata(enquiry)}<section class="data-plane" aria-labelledby="contact-operations-title" style="margin-top:14px"><header class="section-header"><div><h2 id="contact-operations-title">Operational context</h2><p>Current server-authoritative state. Opening this page does not change read state or workflow status.</p></div><span class="section-meta">Explicit actions only</span></header><div style="padding:18px"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:10px">${fact("Workflow status", statusLabel(String(enquiry.status || "new")), true)}${fact("Read state", readState, true)}${fact("Archive state", archiveState, true)}${fact("Assignment", assignmentState, true)}${fact("History events", counts.history, true)}${fact("Internal notes", counts.notes, true)}${fact("Outbound replies", counts.messages, true)}${dateFact("Received", enquiry.created_at)}${dateFact("First reviewed", enquiry.first_read_at)}${dateFact("Currently read since", enquiry.read_at)}${dateFact("Resolved", enquiry.resolved_at)}${dateFact("Closed", enquiry.closed_at)}${dateFact("Archived", enquiry.archived_at)}${dateFact("Last activity", enquiry.last_activity_at)}${dateFact("Record updated", enquiry.updated_at)}</div></div></section>${contactOperations(basePath, session, enquiry)}${internalNotes(basePath, session, context, enquiry)}${contactReplyComposer(basePath, session, enquiry)}${contactActivityTimeline(context)}<div class="readonly-note"><span>Original customer intake remains immutable. Workflow, assignment, notes, replies and delivery evidence are retained as separate operational records.</span></div><div class="footerline"><span>RC IT Services · Private contact record</span><span>Escaped customer content · Immutable intake · Version ${esc(version)}</span></div></main><style>@media(max-width:600px){#main-content .page-heading{align-items:flex-start}}</style></div>`);
+  const page = shell("Contact enquiry", `<div class="admin-shell">${adminHeader(basePath, session, "contacts")}${workspaceBar("Enquiry detail", "Immutable intake · operational context")}<main class="workspace" id="main-content" aria-labelledby="contact-detail-title"><div class="page-heading"><div><div class="eyebrow">Contact record</div><h1 id="contact-detail-title">${esc(enquiry.name || "Contact enquiry")}</h1><p>${esc(enquiry.subject || "General enquiry")}</p></div><div class="snapshot"><strong>${statusBadge(String(enquiry.status || "new"))}</strong>${esc(readState)} · ${esc(archiveState)}<br>${esc(assignmentState)} · Version ${esc(version)}</div></div>${noticeHtml}<div class="actions" style="margin:0 0 14px"><a class="btn secondary" href="${basePath}/contacts">Back to contact inbox</a></div><section class="data-plane" aria-labelledby="original-enquiry-title"><header class="section-header"><div><h2 id="original-enquiry-title">Original enquiry</h2><p>Accepted customer-submitted evidence is immutable after intake.</p></div><span class="section-meta">Read-only evidence</span></header><div style="padding:18px"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:10px;margin-bottom:16px">${fact("Name", enquiry.name)}${fact("Email", enquiry.email)}${fact("Phone", enquiry.phone || "—")}${fact("Company", enquiry.company || "—")}${fact("Service / topic", enquiry.service || "—")}${fact("Source", source)}${fact("Privacy consent", consentState)}${dateFact("Consent recorded", enquiry.consent_at)}</div><div style="padding:16px;border:1px solid var(--line);background:var(--surface-subtle)"><span style="display:block;color:var(--muted);font-size:9px;font-weight:750;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Customer message</span><div style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.7;color:var(--text)">${esc(message || "No message content was stored.")}</div></div></div></section>${detailOperationalMetadata(enquiry)}<section class="data-plane" aria-labelledby="contact-operations-title" style="margin-top:14px"><header class="section-header"><div><h2 id="contact-operations-title">Operational context</h2><p>Current server-authoritative state. Opening this page does not change read state or workflow status.</p></div><span class="section-meta">Explicit actions only</span></header><div style="padding:18px"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:10px">${fact("Workflow status", statusLabel(String(enquiry.status || "new")), true)}${fact("Read state", readState, true)}${fact("Archive state", archiveState, true)}${fact("Assignment", assignmentState, true)}${fact("History events", counts.history, true)}${fact("Internal notes", counts.notes, true)}${fact("Conversation messages", counts.messages + (context.inbound?.length || 0), true)}${dateFact("Received", enquiry.created_at)}${dateFact("First reviewed", enquiry.first_read_at)}${dateFact("Currently read since", enquiry.read_at)}${dateFact("Resolved", enquiry.resolved_at)}${dateFact("Closed", enquiry.closed_at)}${dateFact("Archived", enquiry.archived_at)}${dateFact("Last activity", enquiry.last_activity_at)}${dateFact("Record updated", enquiry.updated_at)}</div></div></section>${contactOperations(basePath, session, enquiry)}${internalNotes(basePath, session, context, enquiry)}${contactReplyComposer(basePath, session, enquiry)}${contactActivityTimeline(context, basePath, String(enquiry.id || ""))}<div class="readonly-note"><span>Original customer intake remains immutable. Workflow, assignment, notes, replies and delivery evidence are retained as separate operational records.</span></div><div class="footerline"><span>RC IT Services · Private contact record</span><span>Escaped customer content · Immutable intake · Version ${esc(version)}</span></div></main><style>@media(max-width:600px){#main-content .page-heading{align-items:flex-start}}</style><script src="${basePath}/contacts/live.js" defer></script></div>`);
+  const headers = new Headers(page.headers);
+  headers.set("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
+  return new Response(page.body, { status: page.status, headers });
 }
 
 function contactDetailError(basePath: string, session: AdminSessionView, title: string, message: string, status: number): Response {
@@ -437,15 +500,53 @@ function mutationErrorCode(code: unknown): string {
 }
 
 export async function handleContactRoute({ request, url, path, basePath, authState }: { request: Request; url: URL; path: string; basePath: string; authState: any | null; }): Promise<Response | null> {
+  const liveScript = path === "/contacts/live.js";
   const detailMatch = path.match(/^\/contacts\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i);
+  const attachmentMatch = path.match(/^\/contacts\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/attachments\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i);
   const mutationMatch = path.match(/^\/contacts\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/(read-state|workflow|archive-state|note|reply|assignment)$/i);
-  if (path !== "/contacts" && !detailMatch && !mutationMatch) return null;
+  if (path !== "/contacts" && !liveScript && !detailMatch && !attachmentMatch && !mutationMatch) return null;
   if (!authState) return loginPage(basePath, "Please sign in to continue.", true);
   if (authState.admin.role !== "super_admin") return authPage("Access denied", "<h1>Access denied</h1><p>Contact administration requires active super administrator authority.</p>", 403);
   const adminId = String(authState.admin.id);
 
   if (request.method === "GET") {
+    if (liveScript) return new Response(`(() => {
+  const current = document.getElementById('contact-activity');
+  if (!current) return;
+  let busy = false;
+  setInterval(async () => {
+    if (busy || document.hidden) return;
+    busy = true;
+    try {
+      const response = await fetch(location.href, { credentials: 'same-origin', cache: 'no-store' });
+      if (!response.ok) return;
+      const next = new DOMParser().parseFromString(await response.text(), 'text/html');
+      for (const selector of ['#contact-activity', '.snapshot', 'section[aria-labelledby="contact-operations-title"] > div']) {
+        const oldNode = document.querySelector(selector);
+        const newNode = next.querySelector(selector);
+        if (oldNode && newNode && oldNode.innerHTML !== newNode.innerHTML) oldNode.innerHTML = newNode.innerHTML;
+      }
+    } catch { /* Keep the current conversation visible during a network interruption. */ }
+    finally { busy = false; }
+  }, 3000);
+})();`, { headers: { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" } });
     if (mutationMatch) return authPage("Method not allowed", "<h1>Method not allowed</h1><p>Contact mutations require a protected POST request.</p>", 405, new Headers({ allow: "POST" }));
+    if (attachmentMatch) {
+      const context = await contactDetail(adminId, attachmentMatch[1].toLowerCase());
+      const item = context.attachments?.find((value) => String(value.id || "").toLowerCase() === attachmentMatch[2].toLowerCase());
+      if (context.ok !== true || !item) return authPage("File not found", "<h1>File not found</h1>", 404);
+      const lookup = await fetch(`${SUPABASE_URL}/rest/v1/contact_message_attachments?id=eq.${encodeURIComponent(String(item.id))}&select=storage_path&limit=1`, { headers: apiHeaders() });
+      if (!lookup.ok) return authPage("File unavailable", "<h1>File unavailable</h1>", 503);
+      const rows = await lookup.json();
+      const storagePath = String(rows?.[0]?.storage_path || "");
+      if (!/^((inbound|outbound)\/[a-z0-9-]+\/\d+)$/.test(storagePath)) return authPage("File not found", "<h1>File not found</h1>", 404);
+      const file = await fetch(`${SUPABASE_URL}/storage/v1/object/${ATTACHMENT_BUCKET}/${storagePath}`, { headers: apiHeaders() });
+      if (!file.ok) return authPage("File unavailable", "<h1>File unavailable</h1>", 503);
+      return new Response(file.body, { status: 200, headers: {
+        "content-type": "application/octet-stream", "content-disposition": `attachment; filename="${safeFilename(item.filename)}"`,
+        "cache-control": "private, no-store", "x-content-type-options": "nosniff"
+      } });
+    }
     if (detailMatch) {
       const enquiryId = detailMatch[1].toLowerCase();
       const context = await contactDetail(adminId, enquiryId);
@@ -510,12 +611,25 @@ export async function handleContactRoute({ request, url, path, basePath, authSta
     result = await rpc("admin_add_contact_enquiry_note", { ...auditBase, p_body: body });
     notice = "note";
   } else {
-    const subject = String(form.get("subject") ?? "").trim();
+    const subjectInput = String(form.get("subject") ?? "").trim();
+    const reference = `[RC-ENQ:${enquiryId}]`;
+    const subject = subjectInput.includes(reference) ? subjectInput : `${subjectInput.replace(/\s*\[RC-ENQ:[^\]]+\]/gi, "").trim()} ${reference}`;
     const body = String(form.get("body") ?? "").trim();
     if (subject.length < 1 || subject.length > REPLY_SUBJECT_MAX || /[\r\n]/.test(subject) || body.length < 1 || body.length > REPLY_BODY_MAX) {
       return redirect(`${basePath}/contacts/${enquiryId}?error=reply_validation`);
     }
-    result = await rpc("admin_queue_contact_enquiry_reply", { ...auditBase, p_subject: subject, p_body: body });
+    const files = form.getAll("attachments").filter((value): value is File => value instanceof File && value.size > 0);
+    if (files.length > MAX_ATTACHMENTS || files.some((file) => file.size > MAX_ATTACHMENT_BYTES) || files.reduce((sum, file) => sum + file.size, 0) > MAX_REPLY_ATTACHMENTS_BYTES) {
+      return redirect(`${basePath}/contacts/${enquiryId}?error=reply_validation`);
+    }
+    const uploaded = await uploadReplyAttachments(files);
+    try {
+      result = await rpc("admin_queue_contact_reply_with_attachments", { ...auditBase, p_subject: subject, p_body: body, p_attachments: uploaded });
+    } catch (error) {
+      await cleanupReplyAttachments(uploaded);
+      throw error;
+    }
+    if (!result || result.ok !== true) await cleanupReplyAttachments(uploaded);
     if (!result || result.ok !== true) return redirect(`${basePath}/contacts/${enquiryId}?error=${mutationErrorCode(result?.code)}`);
     const emailLogId = String(result.email_log_id || "");
     notice = await dispatchQueuedEmail(emailLogId) ? "reply_sent" : "reply_queued";
